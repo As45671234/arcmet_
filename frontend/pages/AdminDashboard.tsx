@@ -1,0 +1,1537 @@
+
+import React, { useEffect, useState } from 'react';
+import { Category } from '../types';
+import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage } from '../services/api';
+
+interface AdminDashboardProps {
+  categories: Category[];
+  setCategories: (cats: Category[]) => void;
+  onLogout: () => void;
+}
+
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout }) => {
+  const [activeTab, setActiveTab] = useState<'inventory' | 'import' | 'orders' | 'leads'>('inventory');
+  const [isImporting, setIsImporting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [invPage, setInvPage] = useState(1);
+  const INV_PAGE_SIZE = 30;
+  const [adminCategories, setAdminCategories] = useState<Category[]>([]);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editId, setEditId] = useState<string>('');
+  const [addForm, setAddForm] = useState({
+    category_title: '',
+    name: '',
+    brandOrGroup: '',
+    unit: 'шт',
+    sku: '',
+    image: '',
+    description: '',
+    prices: {
+      retail: '',
+      purchase: '',
+      recommended: '',
+      client: '',
+      online: '',
+      wholesale_5m: '',
+      wholesale_1m: '',
+    },
+    attrs: {
+      thickness_mm: '',
+      roll_size_mm: '',
+      pack_area_m2: '',
+      pack_volume_m3: '',
+      roll_area_m2: '',
+      pack_qty: '',
+      marking: '',
+    },
+    inStock: true,
+  });
+
+  const [editForm, setEditForm] = useState({
+    category_title: '',
+    name: '',
+    brandOrGroup: '',
+    unit: 'шт',
+    sku: '',
+    image: '',
+    description: '',
+    prices: {
+      retail: '',
+      purchase: '',
+      recommended: '',
+      client: '',
+      online: '',
+      wholesale_5m: '',
+      wholesale_1m: '',
+    },
+    attrs: {
+      thickness_mm: '',
+      roll_size_mm: '',
+      pack_area_m2: '',
+      pack_volume_m3: '',
+      roll_area_m2: '',
+      pack_qty: '',
+      marking: '',
+    },
+    inStock: true,
+  });
+  const token = getAdminToken();
+  const [addImageUploading, setAddImageUploading] = useState(false);
+  const [editImageUploading, setEditImageUploading] = useState(false);
+
+  // Orders
+  const [orders, setOrders] = useState<any[]>([]);
+  const [ordersTotal, setOrdersTotal] = useState(0);
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersLimit, setOrdersLimit] = useState(25);
+  const [ordersStatus, setOrdersStatus] = useState<string>('');
+  const [ordersSortBy, setOrdersSortBy] = useState<'date' | 'status'>('date');
+  const [ordersSortDir, setOrdersSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const [isOrderOpen, setIsOrderOpen] = useState(false);
+  const [orderLoading, setOrderLoading] = useState(false);
+  const [activeOrder, setActiveOrder] = useState<any | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string>('');
+
+  // Leads
+  const [leads, setLeads] = useState<any[]>([]);
+  const [leadsTotal, setLeadsTotal] = useState(0);
+  const [leadsPage, setLeadsPage] = useState(1);
+  const [leadsLimit, setLeadsLimit] = useState(25);
+  const [leadsStatus, setLeadsStatus] = useState<string>('');
+  const [leadsSortDir, setLeadsSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const [isLeadOpen, setIsLeadOpen] = useState(false);
+  const [leadLoading, setLeadLoading] = useState(false);
+  const [activeLead, setActiveLead] = useState<any | null>(null);
+  const [deleteLeadConfirmId, setDeleteLeadConfirmId] = useState<string>('');
+
+  const loadLeads = async (page = leadsPage) => {
+    if (!token) return;
+    const data = await adminFetchLeads(token, {
+      page,
+      limit: leadsLimit,
+      status: leadsStatus || undefined,
+      sortDir: leadsSortDir,
+    });
+    setLeads(data.items || []);
+    setLeadsTotal(Number(data.total || 0));
+    setLeadsPage(Number(data.page || page));
+  };
+
+  const openLead = async (id: string) => {
+    if (!token) return;
+    setIsLeadOpen(true);
+    setLeadLoading(true);
+    setActiveLead(null);
+    try {
+      const data = await adminFetchLead(token, id);
+      setActiveLead(data.lead);
+    } finally {
+      setLeadLoading(false);
+    }
+  };
+
+  const loadOrders = async (page = ordersPage) => {
+    if (!token) return;
+    const data = await adminFetchOrders(token, {
+      page,
+      limit: ordersLimit,
+      status: ordersStatus || undefined,
+      sortBy: ordersSortBy,
+      sortDir: ordersSortDir,
+    });
+    setOrders(data.items || []);
+    setOrdersTotal(Number(data.total || 0));
+    setOrdersPage(Number(data.page || page));
+  };
+
+  const openOrder = async (id: string) => {
+    if (!token) return;
+    setIsOrderOpen(true);
+    setOrderLoading(true);
+    setActiveOrder(null);
+    try {
+      const data = await adminFetchOrder(token, id);
+      setActiveOrder(data.order);
+    } finally {
+      setOrderLoading(false);
+    }
+  };
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const parseNum = (v: string) => {
+    const s = String(v || '').trim();
+    if (!s) return undefined;
+    const n = Number(s.replace(/\s+/g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : undefined;
+  };
+
+  const refreshAdmin = async () => {
+    const data = await fetchAdminCatalog(token);
+    setAdminCategories(data.categories as any);
+  };
+
+  const refreshPublic = async () => {
+    const data = await fetchCatalog();
+    setCategories(data.categories as any);
+  };
+
+  const refreshAll = async () => {
+    await Promise.allSettled([refreshAdmin(), refreshPublic()]);
+  };
+
+  useEffect(() => {
+    refreshAll();
+  }, []);
+
+useEffect(() => {
+    if (activeTab !== 'orders') return;
+    loadOrders(ordersPage);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, ordersPage, ordersLimit, ordersStatus, ordersSortBy, ordersSortDir]);
+
+  useEffect(() => {
+    if (activeTab !== 'leads') return;
+    loadLeads(leadsPage);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, leadsPage, leadsLimit, leadsStatus, leadsSortDir]);
+
+  useEffect(() => { setInvPage(1); }, [searchTerm]);
+
+
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const result = await adminImportExcel(token, file);
+      await refreshAll();
+      alert(`Импорт завершён: добавлено ${result.inserted}, обновлено ${result.updated}, пропущено ${result.skipped}`);
+      setActiveTab('inventory');
+    } catch (error: any) {
+      console.error(error);
+      alert(error?.message || 'Ошибка при импорте Excel файла');
+    } finally {
+      setIsImporting(false);
+      e.target.value = '';
+    }
+  };
+
+  const toggleProductStock = async (prodId: string, current: boolean) => {
+    try {
+      await adminPatchProduct(token, prodId, { inStock: !current });
+      await refreshAll();
+    } catch (e: any) {
+      alert(e?.message || 'Ошибка');
+    }
+  };
+
+  const openEditModal = (prod: any, categoryTitle: string) => {
+    setEditId(String(prod.id));
+    setEditForm({
+      category_title: categoryTitle,
+      name: String(prod.name || ''),
+      brandOrGroup: String(prod.brandOrGroup || ''),
+      unit: String(prod.unit || 'шт'),
+      sku: String(prod.sku || ''),
+      image: String(prod.image || ''),
+      description: String(prod.description || ''),
+      prices: {
+        retail: prod?.prices?.retail !== undefined ? String(prod.prices.retail) : '',
+        purchase: prod?.prices?.purchase !== undefined ? String(prod.prices.purchase) : '',
+        recommended: prod?.prices?.recommended !== undefined ? String(prod.prices.recommended) : '',
+        client: prod?.prices?.client !== undefined ? String(prod.prices.client) : '',
+        online: prod?.prices?.online !== undefined ? String(prod.prices.online) : '',
+        wholesale_5m: prod?.prices?.wholesale_5m !== undefined ? String(prod.prices.wholesale_5m) : '',
+        wholesale_1m: prod?.prices?.wholesale_1m !== undefined ? String(prod.prices.wholesale_1m) : '',
+      },
+      attrs: {
+        thickness_mm: String(prod?.attrs?.thickness_mm || ''),
+        roll_size_mm: String(prod?.attrs?.roll_size_mm || ''),
+        pack_area_m2: String(prod?.attrs?.pack_area_m2 || ''),
+        pack_volume_m3: prod?.attrs?.pack_volume_m3 !== undefined ? String(prod.attrs.pack_volume_m3) : '',
+        roll_area_m2: String(prod?.attrs?.roll_area_m2 || ''),
+        pack_qty: String(prod?.attrs?.pack_qty || ''),
+        marking: String(prod?.attrs?.marking || ''),
+      },
+      inStock: !!prod.inStock,
+    });
+    setIsEditOpen(true);
+  };
+
+  const submitEditProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editId) return;
+
+    const prices: any = {};
+    const retail = parseNum(editForm.prices.retail);
+    const purchase = parseNum(editForm.prices.purchase);
+    const recommended = parseNum(editForm.prices.recommended);
+    const client = parseNum(editForm.prices.client);
+    const online = parseNum(editForm.prices.online);
+    const w5 = parseNum(editForm.prices.wholesale_5m);
+    const w1 = parseNum(editForm.prices.wholesale_1m);
+
+    if (retail !== undefined) prices.retail = retail;
+    if (purchase !== undefined) prices.purchase = purchase;
+    if (recommended !== undefined) prices.recommended = recommended;
+    if (client !== undefined) prices.client = client;
+    if (online !== undefined) prices.online = online;
+    if (w5 !== undefined) prices.wholesale_5m = w5;
+    if (w1 !== undefined) prices.wholesale_1m = w1;
+
+    const attrs: any = {};
+    Object.entries(editForm.attrs).forEach(([k, v]) => {
+      const s = String(v || '').trim();
+      if (!s) return;
+      if (k === 'pack_volume_m3') {
+        const n = parseNum(s);
+        if (n !== undefined) attrs.pack_volume_m3 = n;
+        return;
+      }
+      attrs[k] = s;
+    });
+
+    try {
+      await adminPatchProduct(token, editId, {
+        name: editForm.name,
+        brandOrGroup: editForm.brandOrGroup,
+        unit: editForm.unit,
+        sku: editForm.sku,
+        image: editForm.image,
+        description: editForm.description,
+        inStock: editForm.inStock,
+        prices,
+        attrs,
+      });
+      setIsEditOpen(false);
+      await refreshAll();
+    } catch (err: any) {
+      alert(err?.message || 'Ошибка');
+    }
+  };
+
+  const deleteProduct = async (prodId: string) => {
+    if (!confirm('Удалить товар навсегда?')) return;
+    try {
+      await adminDeleteProduct(token, prodId);
+      await refreshAll();
+    } catch (e: any) {
+      alert(e?.message || 'Ошибка');
+    }
+  };
+
+  const openAddModal = () => {
+    setAddForm({
+      category_title: '',
+      name: '',
+      brandOrGroup: '',
+      unit: 'шт',
+      sku: '',
+      image: '',
+      description: '',
+      prices: {
+        retail: '',
+        purchase: '',
+        recommended: '',
+        client: '',
+        online: '',
+        wholesale_5m: '',
+        wholesale_1m: '',
+      },
+      attrs: {
+        thickness_mm: '',
+        roll_size_mm: '',
+        pack_area_m2: '',
+        pack_volume_m3: '',
+        roll_area_m2: '',
+        pack_qty: '',
+        marking: '',
+      },
+      inStock: true,
+    });
+    setIsAddOpen(true);
+  };
+
+  const toNumberOrUndefined = (v: string) => {
+    const s = String(v || '').trim();
+    if (!s) return undefined;
+    const n = Number(s.replace(/\s+/g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : undefined;
+  };
+
+  const uploadImageForAdd = async (file?: File | null) => {
+    if (!file || !token) return;
+    setAddImageUploading(true);
+    try {
+      const res = await adminUploadProductImage(token, file);
+      setAddForm((prev) => ({ ...prev, image: res.imageUrl || '' }));
+    } catch (e: any) {
+      alert(e?.message || 'Ошибка загрузки изображения');
+    } finally {
+      setAddImageUploading(false);
+    }
+  };
+
+  const uploadImageForEdit = async (file?: File | null) => {
+    if (!file || !token) return;
+    setEditImageUploading(true);
+    try {
+      const res = await adminUploadProductImage(token, file);
+      setEditForm((prev) => ({ ...prev, image: res.imageUrl || '' }));
+    } catch (e: any) {
+      alert(e?.message || 'Ошибка загрузки изображения');
+    } finally {
+      setEditImageUploading(false);
+    }
+  };
+
+  const submitAddProduct = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    const category_title = addForm.category_title.trim();
+    const name = addForm.name.trim();
+    if (!category_title || !name) {
+      alert('Заполните категорию и наименование');
+      return;
+    }
+
+    const payload: any = {
+      category_title,
+      name,
+      brandOrGroup: addForm.brandOrGroup.trim(),
+      unit: addForm.unit.trim() || 'шт',
+      sku: addForm.sku.trim(),
+      image: addForm.image.trim(),
+      description: addForm.description.trim(),
+      inStock: !!addForm.inStock,
+      prices: {},
+      attrs: {},
+    };
+
+    const prices: any = {};
+    const p = addForm.prices;
+    const retail = toNumberOrUndefined(p.retail);
+    const purchase = toNumberOrUndefined(p.purchase);
+    const recommended = toNumberOrUndefined(p.recommended);
+    const client = toNumberOrUndefined(p.client);
+    const online = toNumberOrUndefined(p.online);
+    const w5 = toNumberOrUndefined(p.wholesale_5m);
+    const w1 = toNumberOrUndefined(p.wholesale_1m);
+    if (retail !== undefined) prices.retail = retail;
+    if (purchase !== undefined) prices.purchase = purchase;
+    if (recommended !== undefined) prices.recommended = recommended;
+    if (client !== undefined) prices.client = client;
+    if (online !== undefined) prices.online = online;
+    if (w5 !== undefined) prices.wholesale_5m = w5;
+    if (w1 !== undefined) prices.wholesale_1m = w1;
+    payload.prices = prices;
+
+    const a: any = {};
+    const attrs = addForm.attrs;
+    if (attrs.thickness_mm.trim()) a.thickness_mm = attrs.thickness_mm.trim();
+    if (attrs.roll_size_mm.trim()) a.roll_size_mm = attrs.roll_size_mm.trim();
+    if (attrs.pack_area_m2.trim()) a.pack_area_m2 = attrs.pack_area_m2.trim();
+    const packVol = toNumberOrUndefined(attrs.pack_volume_m3);
+    if (packVol !== undefined) a.pack_volume_m3 = packVol;
+    if (attrs.roll_area_m2.trim()) a.roll_area_m2 = attrs.roll_area_m2.trim();
+    if (attrs.pack_qty.trim()) a.pack_qty = attrs.pack_qty.trim();
+    if (attrs.marking.trim()) a.marking = attrs.marking.trim();
+    payload.attrs = a;
+
+    try {
+      await adminCreateProduct(token, payload);
+      setIsAddOpen(false);
+      await refreshAll();
+    } catch (err: any) {
+      alert(err?.message || 'Ошибка');
+    }
+  };
+
+  const totalCount = adminCategories.reduce((s, c) => s + c.items.length, 0);
+
+  const invAll: any[] = adminCategories.flatMap((cat: any) =>
+    (cat.items || []).map((p: any) => ({ ...p, __catTitle: cat.title }))
+  );
+
+  const invFiltered = invAll.filter((p: any) =>
+    String(p?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const invTotalPages = Math.max(1, Math.ceil(invFiltered.length / INV_PAGE_SIZE));
+  const invPageSafe = Math.min(invPage, invTotalPages);
+  const invItems = invFiltered.slice((invPageSafe - 1) * INV_PAGE_SIZE, invPageSafe * INV_PAGE_SIZE);
+
+  const InvPager = () => (
+    <div className="flex items-center justify-center gap-3 py-4">
+      <button
+        type="button"
+        onClick={() => setInvPage((p) => Math.max(1, p - 1))}
+        disabled={invPageSafe <= 1}
+        className={`px-4 py-2 rounded-xl font-bold text-sm border ${
+          invPageSafe <= 1 ? 'bg-gray-100 text-gray-400 border-gray-100' : 'bg-white hover:bg-gray-50 border-gray-200'
+        }`}
+      >
+        ← Назад
+      </button>
+      <div className="text-sm font-bold text-gray-600">
+        Страница {invPageSafe} / {invTotalPages}
+      </div>
+      <button
+        type="button"
+        onClick={() => setInvPage((p) => Math.min(invTotalPages, p + 1))}
+        disabled={invPageSafe >= invTotalPages}
+        className={`px-4 py-2 rounded-xl font-bold text-sm border ${
+          invPageSafe >= invTotalPages ? 'bg-gray-100 text-gray-400 border-gray-100' : 'bg-white hover:bg-gray-50 border-gray-200'
+        }`}
+      >
+        Вперёд →
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="container mx-auto px-6 py-12 max-w-7xl">
+      <div className="flex items-center justify-between mb-12">
+        <div>
+          <h1 className="text-4xl font-black text-blue-900 uppercase tracking-tighter">Панель управления</h1>
+          <p className="text-gray-500 font-medium">Управление каталогом и импорт данных</p>
+        </div>
+        <button 
+          onClick={onLogout}
+          className="px-6 py-3 bg-red-50 text-red-500 font-bold rounded-xl hover:bg-red-500 hover:text-white transition-all text-sm uppercase tracking-widest"
+        >
+          Выйти
+        </button>
+      </div>
+
+      <div className="flex gap-4 mb-8">
+        <button 
+          onClick={() => setActiveTab('inventory')}
+          className={`px-8 py-4 rounded-2xl font-bold transition-all uppercase text-xs tracking-widest ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'bg-white text-gray-400 hover:bg-blue-50'}`}
+        >
+          <i className="fas fa-boxes mr-2"></i> Инвентарь
+        </button>
+        <button 
+          onClick={() => setActiveTab('import')}
+          className={`px-8 py-4 rounded-2xl font-bold transition-all uppercase text-xs tracking-widest ${activeTab === 'import' ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'bg-white text-gray-400 hover:bg-blue-50'}`}
+        >
+          <i className="fas fa-file-import mr-2"></i> Импорт Excel
+        </button>
+        <button 
+          onClick={() => setActiveTab('orders')}
+          className={`px-8 py-4 rounded-2xl font-bold transition-all uppercase text-xs tracking-widest ${activeTab === 'orders' ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'bg-white text-gray-400 hover:bg-blue-50'}`}
+        >
+          <i className="fas fa-clipboard-list mr-2"></i> Заказы
+        </button>
+        <button 
+          onClick={() => setActiveTab('leads')}
+          className={`px-8 py-4 rounded-2xl font-bold transition-all uppercase text-xs tracking-widest ${activeTab === 'leads' ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'bg-white text-gray-400 hover:bg-blue-50'}`}
+        >
+          <i className="fas fa-inbox mr-2"></i> Заявки
+        </button>
+      </div>
+
+      <div className="bg-white rounded-[40px] shadow-2xl border border-gray-100 overflow-hidden">
+        {activeTab === 'import' ? (
+          <div className="p-20 text-center">
+            <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-8 text-blue-400 text-4xl">
+              <i className="fas fa-file-excel"></i>
+            </div>
+            <h3 className="text-3xl font-black text-blue-900 mb-4 uppercase tracking-tighter">Загрузка каталога</h3>
+            <p className="text-gray-400 max-w-md mx-auto mb-10 font-medium">Выберите файл .xlsx или .xls. Система сохранит товары в MongoDB и обновит каталог.</p>
+
+            <label className={`inline-flex items-center gap-4 px-12 py-6 rounded-3xl font-black uppercase tracking-widest text-sm cursor-pointer transition-all ${isImporting ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-2xl shadow-blue-200 hover:-translate-y-1'}`}>
+              {isImporting ? (
+                <><i className="fas fa-spinner fa-spin"></i> Обработка...</>
+              ) : (
+                <><i className="fas fa-cloud-upload-alt text-xl"></i> Выбрать файл Excel</>
+              )}
+              <input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleExcelImport} disabled={isImporting} />
+            </label>
+          </div>
+        ) : activeTab === 'orders' ? (
+          <div className="p-10">
+            <div className="flex flex-col lg:flex-row lg:items-end gap-4 mb-6">
+              <div className="flex-1">
+                <h3 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Заказы</h3>
+                <p className="text-gray-500 text-sm mt-1">История заказов из корзины</p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <select
+                  value={ordersStatus}
+                  onChange={(e) => { setOrdersPage(1); setOrdersStatus(e.target.value); }}
+                  className="px-4 py-3 rounded-2xl border border-gray-200 bg-white font-semibold text-sm"
+                >
+                  <option value="">Все статусы</option>
+                  <option value="new">Новые</option>
+                  <option value="processing">В обработке</option>
+                  <option value="completed">Выполнены</option>
+                  <option value="cancelled">Отменены</option>
+                </select>
+
+                <select
+                  value={ordersSortBy}
+                  onChange={(e) => { setOrdersPage(1); setOrdersSortBy(e.target.value as any); }}
+                  className="px-4 py-3 rounded-2xl border border-gray-200 bg-white font-semibold text-sm"
+                >
+                  <option value="date">Сортировка: Дата</option>
+                  <option value="status">Сортировка: Статус</option>
+                </select>
+
+                <select
+                  value={ordersSortDir}
+                  onChange={(e) => { setOrdersPage(1); setOrdersSortDir(e.target.value as any); }}
+                  className="px-4 py-3 rounded-2xl border border-gray-200 bg-white font-semibold text-sm"
+                >
+                  <option value="desc">Сначала новые</option>
+                  <option value="asc">Сначала старые</option>
+                </select>
+
+                <button
+                  onClick={() => loadOrders(ordersPage)}
+                  className="px-6 py-3 rounded-2xl bg-blue-600 text-white font-black uppercase text-xs tracking-widest shadow-lg shadow-blue-200"
+                >
+                  Обновить
+                </button>
+              </div>
+            </div>
+
+            {orders.length === 0 ? (
+              <div className="p-16 text-center bg-gray-50 rounded-3xl border border-gray-100">
+                <div className="text-gray-400 text-4xl mb-4"><i className="fas fa-inbox"></i></div>
+                <div className="font-bold text-gray-700">Пока нет заказов</div>
+                <div className="text-sm text-gray-500 mt-2">Когда клиент оформит заказ, он появится здесь.</div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-xs uppercase tracking-widest text-gray-500">
+                      <th className="py-3 px-2">Дата</th>
+                      <th className="py-3 px-2">Клиент</th>
+                      <th className="py-3 px-2">Телефон</th>
+                      <th className="py-3 px-2">Сумма</th>
+                      <th className="py-3 px-2">Статус</th>
+                      <th className="py-3 px-2 text-right">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((o) => (
+                      <tr key={o.id} className="border-t border-gray-100 hover:bg-blue-50/40">
+                        <td className="py-4 px-2 text-sm text-gray-700">{o.createdAt ? new Date(o.createdAt).toLocaleString('ru-RU') : '-'}</td>
+                        <td className="py-4 px-2 font-bold text-blue-900">{o.customerName}</td>
+                        <td className="py-4 px-2 text-sm text-gray-700">{o.customerPhone}</td>
+                        <td className="py-4 px-2 font-bold text-gray-900">{Number(o.total || 0).toLocaleString('ru-RU')} ₸</td>
+
+                        <td className="py-4 px-2">
+                          <select
+                            value={o.status}
+                            onChange={async (e) => {
+                              const st = e.target.value;
+                              await adminPatchOrder(token, o.id, st);
+                              setOrders((prev) => prev.map((x) => x.id === o.id ? { ...x, status: st } : x));
+                            }}
+                            className="px-3 py-2 rounded-xl border border-gray-200 bg-white font-bold text-xs"
+                          >
+                            <option value="new">Новый</option>
+                            <option value="processing">В обработке</option>
+                            <option value="completed">Выполнен</option>
+                            <option value="cancelled">Отменён</option>
+                          </select>
+                        </td>
+
+                        <td className="py-4 px-2 text-right">
+                          <button
+                            onClick={() => openOrder(o.id)}
+                            className="px-4 py-2 rounded-xl bg-blue-600 text-white font-black text-xs uppercase tracking-widest mr-2"
+                          >
+                            Открыть
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmId(o.id)}
+                            className="px-4 py-2 rounded-xl bg-red-600 text-white font-black text-xs uppercase tracking-widest"
+                          >
+                            Удалить
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div className="flex items-center justify-between mt-6">
+                  <div className="text-sm text-gray-500">
+                    Всего: <span className="font-bold text-gray-800">{ordersTotal}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setOrdersPage((p) => Math.max(1, p - 1))}
+                      className="px-4 py-2 rounded-xl border border-gray-200 bg-white font-bold text-xs uppercase tracking-widest"
+                      disabled={ordersPage <= 1}
+                    >
+                      Назад
+                    </button>
+                    <button
+                      onClick={() => setOrdersPage((p) => p + 1)}
+                      className="px-4 py-2 rounded-xl border border-gray-200 bg-white font-bold text-xs uppercase tracking-widest"
+                      disabled={ordersPage * ordersLimit >= ordersTotal}
+                    >
+                      Далее
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Delete confirm modal */}
+            {deleteConfirmId ? (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[90]">
+                <div className="bg-white rounded-3xl p-8 w-[92%] max-w-md shadow-2xl">
+                  <h4 className="text-xl font-black text-blue-900 uppercase tracking-tighter mb-2">Подтвердите удаление</h4>
+                  <p className="text-gray-600 text-sm mb-6">Удалить заказ навсегда? Это действие нельзя отменить.</p>
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      onClick={() => setDeleteConfirmId('')}
+                      className="px-6 py-3 rounded-2xl border border-gray-200 bg-white font-black text-xs uppercase tracking-widest"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const id = deleteConfirmId;
+                        setDeleteConfirmId('');
+                        await adminDeleteOrder(token, id);
+                        await loadOrders(ordersPage);
+                      }}
+                      className="px-6 py-3 rounded-2xl bg-red-600 text-white font-black text-xs uppercase tracking-widest"
+                    >
+                      Удалить
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Order modal */}
+            {isOrderOpen ? (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[90]">
+                <div className="bg-white rounded-3xl p-8 w-[95%] max-w-4xl shadow-2xl max-h-[85vh] overflow-y-auto">
+                  <div className="flex items-start justify-between gap-4 mb-6">
+                    <div>
+                      <h4 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Заказ</h4>
+                      {activeOrder?.createdAt ? (
+                        <div className="text-sm text-gray-500 mt-1">{new Date(activeOrder.createdAt).toLocaleString('ru-RU')}</div>
+                      ) : null}
+                    </div>
+                    <button
+                      onClick={() => { setIsOrderOpen(false); setActiveOrder(null); }}
+                      className="w-12 h-12 rounded-2xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  </div>
+
+                  {orderLoading ? (
+                    <div className="p-10 text-center text-gray-500"><i className="fas fa-spinner fa-spin mr-2"></i>Загрузка...</div>
+                  ) : !activeOrder ? (
+                    <div className="p-10 text-center text-gray-500">Заказ не найден</div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                        <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100">
+                          <div className="text-xs uppercase tracking-widest text-gray-500">Клиент</div>
+                          <div className="mt-2 font-black text-blue-900 text-lg">{activeOrder.customerName}</div>
+                          <div className="mt-1 text-sm text-gray-700">{activeOrder.customerPhone}</div>
+                          {activeOrder.customerEmail ? <div className="mt-1 text-sm text-gray-700">{activeOrder.customerEmail}</div> : null}
+                          {activeOrder.address ? <div className="mt-3 text-sm text-gray-700"><span className="font-bold">Адрес:</span> {activeOrder.address}</div> : null}
+                          {activeOrder.comment ? <div className="mt-3 text-sm text-gray-700"><span className="font-bold">Комментарий:</span> {activeOrder.comment}</div> : null}
+                        </div>
+
+                        <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100">
+                          <div className="text-xs uppercase tracking-widest text-gray-500">Статус и сумма</div>
+                          <div className="mt-4 flex flex-col gap-3">
+                            <select
+                              value={activeOrder.status}
+                              onChange={async (e) => {
+                                const st = e.target.value;
+                                await adminPatchOrder(token, activeOrder.id, st);
+                                setActiveOrder((prev: any) => ({ ...prev, status: st }));
+                                setOrders((prev) => prev.map((x) => x.id === activeOrder.id ? { ...x, status: st } : x));
+                              }}
+                              className="px-4 py-3 rounded-2xl border border-gray-200 bg-white font-bold text-sm"
+                            >
+                              <option value="new">Новый</option>
+                              <option value="processing">В обработке</option>
+                              <option value="completed">Выполнен</option>
+                              <option value="cancelled">Отменён</option>
+                            </select>
+
+                            <div className="text-3xl font-black text-gray-900">
+                              {Number(activeOrder.total || 0).toLocaleString('ru-RU')} ₸
+                            </div>
+
+                            <button
+                              onClick={async () => {
+                                const blob = await adminExportOrder(token, activeOrder.id);
+                                downloadBlob(blob, `order_${activeOrder.id}.xlsx`);
+                              }}
+                              className="px-6 py-3 rounded-2xl bg-green-600 text-white font-black uppercase text-xs tracking-widest"
+                            >
+                              Экспорт в Excel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden">
+                        <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 font-black text-blue-900 uppercase tracking-widest text-xs">
+                          Товары
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left">
+                            <thead>
+                              <tr className="text-xs uppercase tracking-widest text-gray-500">
+                                <th className="py-3 px-4">Товар</th>
+                                <th className="py-3 px-4">Артикул</th>
+                                <th className="py-3 px-4 text-right">Кол-во</th>
+                                <th className="py-3 px-4 text-right">Цена</th>
+                                <th className="py-3 px-4 text-right">Сумма</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(activeOrder.items || []).map((it: any, idx2: number) => (
+                                <tr key={idx2} className="border-t border-gray-100">
+                                  <td className="py-4 px-4 font-bold text-gray-900">{it.name}</td>
+                                  <td className="py-4 px-4 text-sm text-gray-700">{it.sku || '-'}</td>
+                                  <td className="py-4 px-4 text-right font-bold">{Number(it.quantity || 0)}</td>
+                                  <td className="py-4 px-4 text-right">{Number(it.price || 0).toLocaleString('ru-RU')} ₸</td>
+                                  <td className="py-4 px-4 text-right font-black">{Number(it.lineTotal || 0).toLocaleString('ru-RU')} ₸</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : activeTab === 'leads' ? (
+          <div className="p-10">
+            <div className="flex flex-col lg:flex-row lg:items-end gap-4 mb-6">
+              <div className="flex-1">
+                <h3 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Заявки</h3>
+                <p className="text-gray-500 text-sm mt-1">Заявки с формы на главной странице</p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <select
+                  value={leadsStatus}
+                  onChange={(e) => { setLeadsPage(1); setLeadsStatus(e.target.value); }}
+                  className="px-4 py-3 rounded-2xl border border-gray-200 bg-white font-semibold text-sm"
+                >
+                  <option value="">Все статусы</option>
+                  <option value="new">Новые</option>
+                  <option value="processing">В обработке</option>
+                  <option value="done">Выполнены</option>
+                </select>
+
+                <select
+                  value={leadsSortDir}
+                  onChange={(e) => { setLeadsPage(1); setLeadsSortDir(e.target.value as any); }}
+                  className="px-4 py-3 rounded-2xl border border-gray-200 bg-white font-semibold text-sm"
+                >
+                  <option value="desc">Сначала новые</option>
+                  <option value="asc">Сначала старые</option>
+                </select>
+
+                <button
+                  onClick={() => loadLeads(leadsPage)}
+                  className="px-6 py-3 rounded-2xl bg-blue-600 text-white font-black uppercase text-xs tracking-widest shadow-lg shadow-blue-200"
+                >
+                  Обновить
+                </button>
+              </div>
+            </div>
+
+            {leads.length === 0 ? (
+              <div className="p-16 text-center bg-gray-50 rounded-3xl border border-gray-100">
+                <div className="text-gray-400 text-4xl mb-4"><i className="fas fa-inbox"></i></div>
+                <div className="font-bold text-gray-700">Пока нет заявок</div>
+                <div className="text-sm text-gray-500 mt-2">Когда клиент отправит заявку, она появится здесь.</div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-xs uppercase tracking-widest text-gray-500">
+                      <th className="py-3 px-2">Дата</th>
+                      <th className="py-3 px-2">Имя</th>
+                      <th className="py-3 px-2">Телефон</th>
+                      <th className="py-3 px-2">Статус</th>
+                      <th className="py-3 px-2 text-right">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leads.map((l) => (
+                      <tr key={l.id} className="border-t border-gray-100 hover:bg-blue-50/40">
+                        <td className="py-4 px-2 text-sm text-gray-700">{l.createdAt ? new Date(l.createdAt).toLocaleString('ru-RU') : '-'}</td>
+                        <td className="py-4 px-2 font-bold text-blue-900">{l.name}</td>
+                        <td className="py-4 px-2 text-sm text-gray-700">{l.phone}</td>
+                        <td className="py-4 px-2">
+                          <select
+                            value={l.status}
+                            onChange={async (e) => {
+                              const st = e.target.value;
+                              await adminPatchLead(token, l.id, st);
+                              setLeads((prev) => prev.map((x) => x.id === l.id ? { ...x, status: st } : x));
+                            }}
+                            className="px-3 py-2 rounded-xl border border-gray-200 bg-white font-bold text-xs"
+                          >
+                            <option value="new">Новая</option>
+                            <option value="processing">В обработке</option>
+                            <option value="done">Выполнена</option>
+                          </select>
+                        </td>
+                        <td className="py-4 px-2 text-right">
+                          <button
+                            onClick={() => openLead(l.id)}
+                            className="px-4 py-2 rounded-xl bg-blue-600 text-white font-black text-xs uppercase tracking-widest mr-2"
+                          >
+                            Открыть
+                          </button>
+                          <button
+                            onClick={() => setDeleteLeadConfirmId(l.id)}
+                            className="px-4 py-2 rounded-xl bg-red-600 text-white font-black text-xs uppercase tracking-widest"
+                          >
+                            Удалить
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div className="flex items-center justify-between mt-6">
+                  <div className="text-sm text-gray-500">
+                    Всего: <span className="font-bold text-gray-800">{leadsTotal}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setLeadsPage((p) => Math.max(1, p - 1))}
+                      className="px-4 py-2 rounded-xl border border-gray-200 bg-white font-bold text-xs uppercase tracking-widest"
+                      disabled={leadsPage <= 1}
+                    >
+                      Назад
+                    </button>
+                    <button
+                      onClick={() => setLeadsPage((p) => p + 1)}
+                      className="px-4 py-2 rounded-xl border border-gray-200 bg-white font-bold text-xs uppercase tracking-widest"
+                      disabled={leadsPage * leadsLimit >= leadsTotal}
+                    >
+                      Далее
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Delete confirm modal */}
+            {deleteLeadConfirmId ? (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[90]">
+                <div className="bg-white rounded-3xl p-8 w-[92%] max-w-md shadow-2xl">
+                  <h4 className="text-xl font-black text-blue-900 uppercase tracking-tighter mb-2">Подтвердите удаление</h4>
+                  <p className="text-gray-600 text-sm mb-6">Удалить заявку навсегда? Это действие нельзя отменить.</p>
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      onClick={() => setDeleteLeadConfirmId('')}
+                      className="px-6 py-3 rounded-2xl border border-gray-200 bg-white font-black text-xs uppercase tracking-widest"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const id = deleteLeadConfirmId;
+                        setDeleteLeadConfirmId('');
+                        await adminDeleteLead(token, id);
+                        await loadLeads(leadsPage);
+                      }}
+                      className="px-6 py-3 rounded-2xl bg-red-600 text-white font-black text-xs uppercase tracking-widest"
+                    >
+                      Удалить
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Lead modal */}
+            {isLeadOpen ? (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[90]">
+                <div className="bg-white rounded-3xl p-8 w-[95%] max-w-3xl shadow-2xl max-h-[85vh] overflow-y-auto">
+                  <div className="flex items-start justify-between gap-4 mb-6">
+                    <div>
+                      <h4 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Заявка</h4>
+                      {activeLead?.createdAt ? (
+                        <div className="text-sm text-gray-500 mt-1">{new Date(activeLead.createdAt).toLocaleString('ru-RU')}</div>
+                      ) : null}
+                    </div>
+                    <button
+                      onClick={() => { setIsLeadOpen(false); setActiveLead(null); }}
+                      className="w-12 h-12 rounded-2xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  </div>
+
+                  {leadLoading ? (
+                    <div className="p-10 text-center text-gray-500"><i className="fas fa-spinner fa-spin mr-2"></i>Загрузка...</div>
+                  ) : !activeLead ? (
+                    <div className="p-10 text-center text-gray-500">Заявка не найдена</div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100">
+                          <div className="text-xs uppercase tracking-widest text-gray-500">Контакты</div>
+                          <div className="mt-2 font-black text-blue-900 text-lg">{activeLead.name}</div>
+                          <div className="mt-1 text-sm text-gray-700">{activeLead.phone}</div>
+                          {activeLead.email ? <div className="mt-1 text-sm text-gray-700">{activeLead.email}</div> : null}
+                        </div>
+
+                        <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100">
+                          <div className="text-xs uppercase tracking-widest text-gray-500">Статус</div>
+                          <div className="mt-4">
+                            <select
+                              value={activeLead.status}
+                              onChange={async (e) => {
+                                const st = e.target.value;
+                                await adminPatchLead(token, activeLead.id, st);
+                                setActiveLead((prev: any) => ({ ...prev, status: st }));
+                                setLeads((prev) => prev.map((x) => x.id === activeLead.id ? { ...x, status: st } : x));
+                              }}
+                              className="px-4 py-3 rounded-2xl border border-gray-200 bg-white font-bold text-sm w-full"
+                            >
+                              <option value="new">Новая</option>
+                              <option value="processing">В обработке</option>
+                              <option value="done">Выполнена</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {activeLead.message ? (
+                        <div className="mt-6 bg-white rounded-3xl border border-gray-100 overflow-hidden">
+                          <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 font-black text-blue-900 uppercase tracking-widest text-xs">
+                            Сообщение
+                          </div>
+                          <div className="p-6 text-gray-800 whitespace-pre-wrap">{activeLead.message}</div>
+                        </div>
+                      ) : null}
+
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+        ) : (
+          <div>
+            <div className="p-8 border-b border-gray-50 flex flex-col md:flex-row gap-6 justify-between items-center bg-gray-50/50">
+              <div className="relative w-full md:w-96">
+                <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-300"></i>
+                <input 
+                  type="text" 
+                  placeholder="Быстрый поиск по складу..." 
+                  className="w-full pl-12 pr-6 py-4 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={openAddModal}
+                  className="px-6 py-3 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-200 transition-all uppercase tracking-widest text-xs hover:bg-blue-700"
+                >
+                  + Добавить товар
+                </button>
+                <div className="text-sm font-bold text-blue-900 uppercase tracking-widest">
+                  Всего товаров: {totalCount}
+                </div>
+              </div>
+            </div>
+
+            <InvPager />
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-[10px] text-gray-400 font-black uppercase tracking-widest border-b border-gray-50">
+                    <th className="px-8 py-6">Товар / Категория</th>
+                    <th className="px-8 py-6">Цена</th>
+                    <th className="px-8 py-6">Статус</th>
+                    <th className="px-8 py-6 text-right">Действия</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {invItems.map((product: any) => (
+                    <tr key={product.id} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="px-8 py-6">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-gray-100 rounded-xl flex-shrink-0 flex items-center justify-center text-gray-300">
+                            <i className="fas fa-image"></i>
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold text-blue-900 line-clamp-1">{product.name}</div>
+                            <div className="text-[10px] font-black text-blue-400 uppercase tracking-widest">{product.__catTitle}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="text-sm font-bold text-gray-700">
+                          {product.prices?.retail ? `${product.prices.retail.toLocaleString()} ₸` : (product.prices?.note || '---')}
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <button 
+                          onClick={() => toggleProductStock(product.id, product.inStock)}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${product.inStock ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}
+                        >
+                          {product.inStock ? 'В наличии' : 'Нет в наличии'}
+                        </button>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => openEditModal(product, product.__catTitle)}
+                            className="w-9 h-9 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all"
+                            title="Редактировать товар"
+                          >
+                            <i className="fas fa-edit text-xs"></i>
+                          </button>
+                          <button 
+                            onClick={() => deleteProduct(product.id)}
+                            className="w-9 h-9 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"
+                            title="Удалить"
+                          >
+                            <i className="fas fa-trash-alt text-xs"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {adminCategories.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-8 py-20 text-center text-gray-400 font-medium italic">
+                        Каталог пуст. Перейдите во вкладку "Импорт Excel", чтобы загрузить товары.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <InvPager />
+          </div>
+        )}
+      </div>
+
+      {isAddOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setIsAddOpen(false)}
+          />
+          <div className="relative w-[min(1000px,92vw)] max-h-[90vh] overflow-y-auto bg-white rounded-[32px] shadow-2xl border border-gray-100">
+            <div className="p-8 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Добавить товар</div>
+                <div className="text-gray-400 font-medium text-sm">Заполните поля и сохраните товар в MongoDB</div>
+              </div>
+              <button
+                onClick={() => setIsAddOpen(false)}
+                className="w-10 h-10 rounded-2xl bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all"
+                title="Закрыть"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            <form onSubmit={submitAddProduct} className="p-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Категория</div>
+                  <input
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                    value={addForm.category_title}
+                    onChange={(e) => setAddForm({ ...addForm, category_title: e.target.value })}
+                    placeholder="Например: Утеплитель"
+                  />
+                </div>
+                <div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Наименование</div>
+                  <input
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                    value={addForm.name}
+                    onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                    placeholder="Название товара"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Группа / Бренд</div>
+                  <input
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                    value={addForm.brandOrGroup}
+                    onChange={(e) => setAddForm({ ...addForm, brandOrGroup: e.target.value })}
+                    placeholder="Например: Protan"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-5">
+                  <div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Ед. изм.</div>
+                    <input
+                      className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                      value={addForm.unit}
+                      onChange={(e) => setAddForm({ ...addForm, unit: e.target.value })}
+                      placeholder="шт"
+                    />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Артикул</div>
+                    <input
+                      className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                      value={addForm.sku}
+                      onChange={(e) => setAddForm({ ...addForm, sku: e.target.value })}
+                      placeholder="SKU"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Изображение (URL)</div>
+                  <input
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                    value={addForm.image}
+                    onChange={(e) => setAddForm({ ...addForm, image: e.target.value })}
+                    placeholder="https://..."
+                  />
+                  <div className="mt-3">
+                    <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-bold uppercase tracking-widest ${addImageUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50 cursor-pointer'}`}>
+                      <i className={`fas ${addImageUploading ? 'fa-spinner fa-spin' : 'fa-upload'}`}></i>
+                      {addImageUploading ? 'Загрузка...' : 'Выбрать файл'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={addImageUploading}
+                        onChange={(e) => {
+                          uploadImageForAdd(e.target.files?.[0]);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div className="flex items-end">
+                  <label className="inline-flex items-center gap-3 px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold text-gray-600 select-none">
+                    <input
+                      type="checkbox"
+                      checked={addForm.inStock}
+                      onChange={(e) => setAddForm({ ...addForm, inStock: e.target.checked })}
+                    />
+                    В наличии
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-8">
+                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Описание</div>
+                <textarea
+                  className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm min-h-[90px]"
+                  value={addForm.description}
+                  onChange={(e) => setAddForm({ ...addForm, description: e.target.value })}
+                  placeholder="Описание (необязательно)"
+                />
+              </div>
+
+              <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-gray-50/60 border border-gray-100 rounded-[28px] p-6">
+                  <div className="text-sm font-black text-blue-900 uppercase tracking-widest mb-5">Цены</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {([
+                      ['Розница (₸)', 'retail'],
+                      ['Закуп (₸)', 'purchase'],
+                      ['Рекоменд. (₸)', 'recommended'],
+                      ['Клиент (₸)', 'client'],
+                      ['Интернет (₸)', 'online'],
+                      ['От 5 млн (₸)', 'wholesale_5m'],
+                      ['От 1 млн (₸)', 'wholesale_1m'],
+                    ] as any).map(([label, key]: [string, keyof typeof addForm.prices]) => (
+                      <div key={key}>
+                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{label}</div>
+                        <input
+                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                          value={(addForm.prices as any)[key]}
+                          onChange={(e) => setAddForm({ ...addForm, prices: { ...addForm.prices, [key]: e.target.value } })}
+                          placeholder="0"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-gray-50/60 border border-gray-100 rounded-[28px] p-6">
+                  <div className="text-sm font-black text-blue-900 uppercase tracking-widest mb-5">Атрибуты</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {([
+                      ['Толщина (мм)', 'thickness_mm'],
+                      ['Размер рулона', 'roll_size_mm'],
+                      ['Площадь в пачке (м2)', 'pack_area_m2'],
+                      ['Объём в пачке (м3)', 'pack_volume_m3'],
+                      ['Площадь в рулоне (м2)', 'roll_area_m2'],
+                      ['Кратность / Кол-во', 'pack_qty'],
+                      ['Маркировка', 'marking'],
+                    ] as any).map(([label, key]: [string, keyof typeof addForm.attrs]) => (
+                      <div key={key} className={key === 'marking' ? 'col-span-2' : ''}>
+                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{label}</div>
+                        <input
+                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                          value={(addForm.attrs as any)[key]}
+                          onChange={(e) => setAddForm({ ...addForm, attrs: { ...addForm.attrs, [key]: e.target.value } })}
+                          placeholder=""
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-10 flex flex-col sm:flex-row gap-4 sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsAddOpen(false)}
+                  className="px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  className="px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs bg-blue-600 text-white shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all"
+                >
+                  Сохранить
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isEditOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setIsEditOpen(false)}
+          />
+          <div className="relative w-[min(1000px,92vw)] max-h-[90vh] overflow-y-auto bg-white rounded-[32px] shadow-2xl border border-gray-100">
+            <div className="p-8 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Редактировать товар</div>
+                <div className="text-gray-400 font-medium text-sm">Измените поля и сохраните изменения</div>
+                <div className="text-[10px] font-black text-blue-400 uppercase tracking-widest mt-2">Категория: {editForm.category_title || '---'}</div>
+              </div>
+              <button
+                onClick={() => setIsEditOpen(false)}
+                className="w-10 h-10 rounded-2xl bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all"
+                title="Закрыть"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            <form onSubmit={submitEditProduct} className="p-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Наименование</div>
+                  <input
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    placeholder="Название товара"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Группа / Бренд</div>
+                  <input
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                    value={editForm.brandOrGroup}
+                    onChange={(e) => setEditForm({ ...editForm, brandOrGroup: e.target.value })}
+                    placeholder="Например: Protan"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Ед. изм.</div>
+                  <input
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                    value={editForm.unit}
+                    onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
+                    placeholder="шт"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Артикул (SKU)</div>
+                  <input
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                    value={editForm.sku}
+                    onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })}
+                    placeholder="01.001"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Изображение (URL)</div>
+                  <input
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                    value={editForm.image}
+                    onChange={(e) => setEditForm({ ...editForm, image: e.target.value })}
+                    placeholder="https://..."
+                  />
+                  <div className="mt-3">
+                    <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-bold uppercase tracking-widest ${editImageUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50 cursor-pointer'}`}>
+                      <i className={`fas ${editImageUploading ? 'fa-spinner fa-spin' : 'fa-upload'}`}></i>
+                      {editImageUploading ? 'Загрузка...' : 'Выбрать файл'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={editImageUploading}
+                        onChange={(e) => {
+                          uploadImageForEdit(e.target.files?.[0]);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Описание</div>
+                  <textarea
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm min-h-[110px]"
+                    value={editForm.description}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    placeholder="Описание товара"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="rounded-3xl border border-gray-100 p-6">
+                  <div className="text-xs font-black uppercase tracking-widest text-blue-900 mb-5">Цены</div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {([
+                      ['Розница', 'retail'],
+                      ['Закупочная', 'purchase'],
+                      ['Рекоменд.', 'recommended'],
+                      ['Для клиентов', 'client'],
+                      ['Интернет', 'online'],
+                      ['От 5 млн', 'wholesale_5m'],
+                      ['От 1 млн', 'wholesale_1m'],
+                    ] as any).map(([label, key]: [string, keyof typeof editForm.prices]) => (
+                      <div key={key}>
+                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{label}</div>
+                        <input
+                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                          value={(editForm.prices as any)[key]}
+                          onChange={(e) => setEditForm({ ...editForm, prices: { ...editForm.prices, [key]: e.target.value } })}
+                          placeholder=""
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-gray-100 p-6">
+                  <div className="text-xs font-black uppercase tracking-widest text-blue-900 mb-5">Характеристики</div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {([
+                      ['Толщина', 'thickness_mm'],
+                      ['Размер рулона', 'roll_size_mm'],
+                      ['Площадь в пачке (м2)', 'pack_area_m2'],
+                      ['Объем в пачке (м3)', 'pack_volume_m3'],
+                      ['Площадь в рулоне (м2)', 'roll_area_m2'],
+                      ['Кратность', 'pack_qty'],
+                      ['Маркировка', 'marking'],
+                    ] as any).map(([label, key]: [string, keyof typeof editForm.attrs]) => (
+                      <div key={key} className={key === 'marking' ? 'col-span-2' : ''}>
+                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{label}</div>
+                        <input
+                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                          value={(editForm.attrs as any)[key]}
+                          onChange={(e) => setEditForm({ ...editForm, attrs: { ...editForm.attrs, [key]: e.target.value } })}
+                          placeholder=""
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-6 flex items-center justify-between rounded-2xl bg-gray-50 p-4">
+                    <div className="text-sm font-bold text-blue-900">Наличие</div>
+                    <button
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, inStock: !editForm.inStock })}
+                      className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${editForm.inStock ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}
+                    >
+                      {editForm.inStock ? 'В наличии' : 'Нет в наличии'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-10 flex flex-col sm:flex-row gap-4 sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsEditOpen(false)}
+                  className="px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  className="px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs bg-blue-600 text-white shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all"
+                >
+                  Сохранить
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default AdminDashboard;

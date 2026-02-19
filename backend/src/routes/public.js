@@ -1,0 +1,119 @@
+const express = require("express");
+const Product = require("../models/Product");
+const Order = require("../models/Order");
+const Lead = require("../models/Lead");
+
+function normalizeOrderItems(items) {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((it) => {
+      const quantity = Number(it.quantity || 0);
+      const price = Number(it.prices?.retail ?? it.price);
+      const lineTotal = (Number.isFinite(price) ? price : 0) * (Number.isFinite(quantity) ? quantity : 0);
+
+      return {
+        productId: it.id ? String(it.id) : (it.productId ? String(it.productId) : ""),
+        name: String(it.name || "").trim(),
+        sku: String(it.sku || "").trim(),
+        unit: String(it.unit || "шт"),
+        image: String(it.image || ""),
+        price: Number.isFinite(price) ? price : undefined,
+        quantity: Number.isFinite(quantity) ? quantity : 0,
+        lineTotal: Number.isFinite(lineTotal) ? lineTotal : 0
+      };
+    })
+    .filter((x) => x.name && x.quantity > 0);
+}
+
+async function createOrderFromPayload(payload) {
+  const { customerName, customerPhone, customerEmail, address, comment, items, total } = payload || {};
+  if (!customerPhone || !customerEmail || !Array.isArray(items) || items.length === 0) return null;
+
+  const cleanItems = normalizeOrderItems(items);
+  if (cleanItems.length === 0) return null;
+
+  const computedTotal = cleanItems.reduce((s, x) => s + Number(x.lineTotal || 0), 0);
+  const finalTotal = Number.isFinite(Number(total)) ? Number(total) : computedTotal;
+
+  return Order.create({
+    customerName: String(customerName || "").trim(),
+    customerPhone: String(customerPhone).trim(),
+    customerEmail: String(customerEmail).trim(),
+    address: String(address || "").trim(),
+    comment: String(comment || "").trim(),
+    items: cleanItems,
+    total: finalTotal
+  });
+}
+
+function publicRoutes(emailLimiter) {
+  const router = express.Router();
+
+  // Catalog for website (only active + inStock)
+  router.get("/catalog", async (req, res) => {
+    const products = await Product.find({ active: true, inStock: true }).sort({ category_title: 1, name: 1 }).lean();
+    const categoriesMap = new Map();
+
+    for (const p of products) {
+      const catId = p.category_id;
+      if (!categoriesMap.has(catId)) {
+        categoriesMap.set(catId, {
+          id: catId,
+          title: p.category_title,
+          fields: [],
+          items: []
+        });
+      }
+      const cat = categoriesMap.get(catId);
+      cat.items.push({
+        id: String(p._id),
+        name: p.name,
+        brandOrGroup: p.brandOrGroup || "",
+        unit: p.unit || "шт",
+        sku: p.sku || "",
+        image: p.image || "",
+        description: p.description || "",
+        prices: p.prices || {},
+        attrs: p.attrs || {},
+        category_id: p.category_id,
+        inStock: !!p.inStock
+      });
+    }
+
+    res.json({ categories: Array.from(categoriesMap.values()) });
+  });
+
+  // Lead form: save to DB only (no email delivery)
+  router.post("/leads/email", emailLimiter, async (req, res) => {
+    const { name, phone, email, message } = req.body || {};
+    if (!phone || !email) return res.status(400).json({ error: "phone and email are required" });
+
+    const lead = await Lead.create({
+      name: String(name || "").trim(),
+      phone: String(phone).trim(),
+      email: String(email).trim(),
+      message: String(message || "").trim()
+    });
+
+    res.json({ ok: true, id: String(lead._id) });
+  });
+
+  // Main order endpoint: save to DB only (no email delivery)
+  router.post("/orders", emailLimiter, async (req, res) => {
+    const order = await createOrderFromPayload(req.body || {});
+    if (!order) return res.status(400).json({ error: "invalid order" });
+    res.json({ ok: true, id: String(order._id) });
+  });
+
+  // Backward-compatible endpoint
+  router.post("/orders/email", emailLimiter, async (req, res) => {
+    const order = await createOrderFromPayload(req.body || {});
+    if (!order) return res.status(400).json({ error: "invalid order" });
+    res.json({ ok: true, id: String(order._id) });
+  });
+
+  return router;
+}
+
+module.exports = publicRoutes;
