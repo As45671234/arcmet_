@@ -13,7 +13,7 @@ const Footer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-16 mb-20">
           <div className="space-y-6">
             <div className="flex items-center gap-2">
-              <img src="https://arcmet.kz/wp-content/uploads/2023/09/favicon.svg" alt="Logo" className="w-12 h-12" />
+              <img src="/logos/img/arcmet.png" alt="Logo" className="w-12 h-12" />
               <span className="text-2xl font-black tracking-tighter">ARCMET</span>
             </div>
             <p className="text-blue-300 leading-relaxed text-sm">

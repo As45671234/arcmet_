@@ -51,7 +51,7 @@ const Header: React.FC<HeaderProps> = ({ cartCount }) => {
     >
       <div className="container mx-auto px-6 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <img src="https://arcmet.kz/wp-content/uploads/2023/09/favicon.svg" alt="Logo" className="w-10 h-10" />
+          <img src="/logos/img/arcmet.png" alt="Logo" className="w-10 h-10" />
           <span className="text-xl font-extrabold tracking-tighter text-blue-900">ARCMET</span>
         </Link>
 
