@@ -5,15 +5,15 @@ const PartnersSection: React.FC = () => {
 
   const logos = useMemo(
     () => [
-      'https://arcmet.kz/wp-content/uploads/2023/11/image-20.png',
-      'https://arcmet.kz/wp-content/uploads/2023/11/frame.png',
-      'https://arcmet.kz/wp-content/uploads/2023/11/frame2.png',
-      'https://arcmet.kz/wp-content/uploads/2023/11/image-23.png',
-      'https://arcmet.kz/wp-content/uploads/2023/11/image-24.png',
-      'https://arcmet.kz/wp-content/uploads/2023/11/image-25.png',
-      'https://arcmet.kz/wp-content/uploads/2023/11/image-26.png',
-      'https://arcmet.kz/wp-content/uploads/2023/11/image-27.png',
-      'https://arcmet.kz/wp-content/uploads/2023/11/image-28.png'
+      '/logos/image-20.png',
+      '/logos/frame.png',
+      '/logos/frame2.png',
+      '/logos/image-23.png',
+      '/logos/image-24.png',
+      '/logos/image-25.png',
+      '/logos/image-26.png',
+      '/logos/image-27.png',
+      '/logos/image-28.png'
     ],
     []
   );
