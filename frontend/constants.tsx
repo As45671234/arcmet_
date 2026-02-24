@@ -1,7 +1,7 @@
 
 import React from 'react';
 
-export const CONTACT_EMAIL = "info@arcmet.kz";
+export const CONTACT_EMAIL = "ceo@arcmet.kz";
 
 export const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   'uteplitel': <i className="fas fa-fire text-orange-500"></i>,

@@ -42,6 +42,7 @@ export interface Category {
   title: string;
   fields: string[];
   items: Product[];
+  image?: string;
 }
 
 export interface CartItem extends Product {

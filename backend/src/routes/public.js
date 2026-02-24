@@ -2,6 +2,7 @@ const express = require("express");
 const Product = require("../models/Product");
 const Order = require("../models/Order");
 const Lead = require("../models/Lead");
+const CategoryMeta = require("../models/CategoryMeta");
 
 function normalizeOrderItems(items) {
   if (!Array.isArray(items)) return [];
@@ -62,7 +63,8 @@ function publicRoutes(emailLimiter) {
           id: catId,
           title: p.category_title,
           fields: [],
-          items: []
+          items: [],
+          image: ""
         });
       }
       const cat = categoriesMap.get(catId);
@@ -79,6 +81,16 @@ function publicRoutes(emailLimiter) {
         category_id: p.category_id,
         inStock: !!p.inStock
       });
+    }
+
+    const catIds = Array.from(categoriesMap.keys());
+    if (catIds.length > 0) {
+      const metas = await CategoryMeta.find({ category_id: { $in: catIds } }).lean();
+      const metaMap = new Map(metas.map((m) => [m.category_id, m]));
+      for (const [id, cat] of categoriesMap.entries()) {
+        const meta = metaMap.get(id);
+        if (meta && meta.image) cat.image = meta.image;
+      }
     }
 
     res.json({ categories: Array.from(categoriesMap.values()) });

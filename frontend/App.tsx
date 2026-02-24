@@ -127,7 +127,10 @@ const App: React.FC = () => {
     <Router>
       <ScrollToTop />
       <div className="flex flex-col min-h-screen relative overflow-x-hidden">
-        <Header cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)} />
+        <Header
+          cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
+          categories={categories}
+        />
 
         {toast && (
           <div className="fixed right-4 top-[76px] z-[9999] pointer-events-none">

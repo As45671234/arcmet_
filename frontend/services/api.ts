@@ -101,6 +101,20 @@ export async function adminUploadProductImage(token: string, file: File) {
   return res.json() as Promise<{ ok: boolean; imageUrl: string }>;
 }
 
+export async function adminFetchCategories(token: string) {
+  return request<{ categories: any[] }>('/api/admin/categories', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function adminPatchCategory(token: string, id: string, patch: any) {
+  return request<{ ok: boolean; category: any }>(`/api/admin/categories/${id}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(patch),
+  });
+}
+
 export async function adminPatchProduct(token: string, id: string, patch: any) {
   return request<{ product: any }>(`/api/admin/products/${id}`, {
     method: 'PATCH',

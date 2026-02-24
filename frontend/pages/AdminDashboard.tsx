@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Category } from '../types';
-import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage } from '../services/api';
+import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage, adminPatchCategory } from '../services/api';
 
 interface AdminDashboardProps {
   categories: Category[];
@@ -10,7 +10,7 @@ interface AdminDashboardProps {
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'inventory' | 'import' | 'orders' | 'leads'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'import' | 'orders' | 'leads' | 'categories'>('inventory');
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [invPage, setInvPage] = useState(1);
@@ -79,6 +79,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
   const token = getAdminToken();
   const [addImageUploading, setAddImageUploading] = useState(false);
   const [editImageUploading, setEditImageUploading] = useState(false);
+  const [categoryImageUploading, setCategoryImageUploading] = useState<Record<string, boolean>>({});
+  const [categoryImageSaving, setCategoryImageSaving] = useState<Record<string, boolean>>({});
+  const [categoryImageDrafts, setCategoryImageDrafts] = useState<Record<string, string>>({});
 
   // Orders
   const [orders, setOrders] = useState<any[]>([]);
@@ -209,6 +212,21 @@ useEffect(() => {
   }, [activeTab, leadsPage, leadsLimit, leadsStatus, leadsSortDir]);
 
   useEffect(() => { setInvPage(1); }, [searchTerm]);
+
+  useEffect(() => {
+    setCategoryImageDrafts((prev) => {
+      const next = { ...prev };
+      adminCategories.forEach((cat: any) => {
+        const id = String(cat.id || "");
+        if (!id) return;
+        if (next[id] === undefined || next[id] === "") {
+          const fallback = String((cat.items || []).find((it: any) => it?.image)?.image || "");
+          next[id] = String(cat.image || "") || fallback;
+        }
+      });
+      return next;
+    });
+  }, [adminCategories]);
 
 
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -399,6 +417,36 @@ useEffect(() => {
     }
   };
 
+  const saveCategoryImage = async (catId: string, title: string) => {
+    if (!token) return;
+    const image = String(categoryImageDrafts[catId] || "");
+    setCategoryImageSaving((prev) => ({ ...prev, [catId]: true }));
+    try {
+      await adminPatchCategory(token, catId, { image, title });
+      await refreshAll();
+    } catch (e: any) {
+      alert(e?.message || "Ошибка сохранения категории");
+    } finally {
+      setCategoryImageSaving((prev) => ({ ...prev, [catId]: false }));
+    }
+  };
+
+  const uploadCategoryImage = async (catId: string, title: string, file?: File | null) => {
+    if (!file || !token) return;
+    setCategoryImageUploading((prev) => ({ ...prev, [catId]: true }));
+    try {
+      const res = await adminUploadProductImage(token, file);
+      const imageUrl = String(res.imageUrl || "");
+      setCategoryImageDrafts((prev) => ({ ...prev, [catId]: imageUrl }));
+      await adminPatchCategory(token, catId, { image: imageUrl, title });
+      await refreshAll();
+    } catch (e: any) {
+      alert(e?.message || "Ошибка загрузки изображения");
+    } finally {
+      setCategoryImageUploading((prev) => ({ ...prev, [catId]: false }));
+    }
+  };
+
   const submitAddProduct = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
@@ -542,6 +590,12 @@ useEffect(() => {
           className={`px-8 py-4 rounded-2xl font-bold transition-all uppercase text-xs tracking-widest ${activeTab === 'leads' ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'bg-white text-gray-400 hover:bg-blue-50'}`}
         >
           <i className="fas fa-inbox mr-2"></i> Заявки
+        </button>
+        <button 
+          onClick={() => setActiveTab('categories')}
+          className={`px-8 py-4 rounded-2xl font-bold transition-all uppercase text-xs tracking-widest ${activeTab === 'categories' ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'bg-white text-gray-400 hover:bg-blue-50'}`}
+        >
+          <i className="fas fa-images mr-2"></i> Категории
         </button>
       </div>
 
@@ -1053,6 +1107,96 @@ useEffect(() => {
             ) : null}
           </div>
 
+        ) : activeTab === 'categories' ? (
+          <div className="p-10">
+            <div className="flex flex-col lg:flex-row lg:items-end gap-4 mb-6">
+              <div className="flex-1">
+                <h3 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Категории</h3>
+                <p className="text-gray-500 text-sm mt-1">Изображения для карточек каталога на главной странице</p>
+              </div>
+              <button
+                onClick={() => refreshAll()}
+                className="px-6 py-3 rounded-2xl bg-blue-600 text-white font-black uppercase text-xs tracking-widest shadow-lg shadow-blue-200"
+              >
+                Обновить
+              </button>
+            </div>
+
+            {adminCategories.length === 0 ? (
+              <div className="p-16 text-center bg-gray-50 rounded-3xl border border-gray-100">
+                <div className="text-gray-400 text-4xl mb-4"><i className="fas fa-images"></i></div>
+                <div className="font-bold text-gray-700">Категории не найдены</div>
+                <div className="text-sm text-gray-500 mt-2">Импортируйте товары, чтобы появились категории.</div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {adminCategories.map((cat: any) => {
+                  const catId = String(cat.id || "");
+                  const title = String(cat.title || "");
+                  const draft = categoryImageDrafts[catId] ?? "";
+                  const fallback = String((cat.items || []).find((it: any) => it?.image)?.image || "");
+                  const previewSrc = draft || String(cat.image || "") || fallback;
+                  const isUploading = !!categoryImageUploading[catId];
+                  const isSaving = !!categoryImageSaving[catId];
+
+                  return (
+                    <div key={catId} className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
+                      <div className="aspect-[16/9] rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 mb-4">
+                        {previewSrc ? (
+                          <img src={previewSrc} alt={title} className="w-full h-full object-cover" />
+                        ) : null}
+                      </div>
+
+                      <div className="flex items-center justify-between gap-4 mb-4">
+                        <div>
+                          <div className="text-lg font-black text-blue-900">{title || "Без названия"}</div>
+                          <div className="text-xs text-gray-400">{catId}</div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div>
+                          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Изображение (URL)</div>
+                          <input
+                            className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                            value={draft}
+                            onChange={(e) => setCategoryImageDrafts((prev) => ({ ...prev, [catId]: e.target.value }))}
+                            placeholder="https://..."
+                          />
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <label className={`inline-flex items-center gap-2 px-4 py-3 rounded-2xl border text-xs font-black uppercase tracking-widest ${isUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50 cursor-pointer'}`}>
+                            <i className={`fas ${isUploading ? 'fa-spinner fa-spin' : 'fa-upload'}`}></i>
+                            {isUploading ? 'Загрузка...' : 'Выбрать файл'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={isUploading}
+                              onChange={(e) => {
+                                uploadCategoryImage(catId, title, e.target.files?.[0]);
+                                e.currentTarget.value = '';
+                              }}
+                            />
+                          </label>
+
+                          <button
+                            type="button"
+                            onClick={() => saveCategoryImage(catId, title)}
+                            disabled={isSaving || isUploading}
+                            className={`px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs ${isSaving || isUploading ? 'bg-gray-100 text-gray-400' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700'}`}
+                          >
+                            {isSaving ? 'Сохранение...' : 'Сохранить'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         ) : (
           <div>
             <div className="p-8 border-b border-gray-50 flex flex-col md:flex-row gap-6 justify-between items-center bg-gray-50/50">

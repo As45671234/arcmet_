@@ -1,14 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Category } from '../types';
 
 interface HeaderProps {
   cartCount: number;
+  categories: Category[];
 }
 
-const Header: React.FC<HeaderProps> = ({ cartCount }) => {
+const Header: React.FC<HeaderProps> = ({ cartCount, categories }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileCatalogOpen, setMobileCatalogOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -23,11 +26,15 @@ const Header: React.FC<HeaderProps> = ({ cartCount }) => {
   }, []);
 
   const navLinks = [
-    { name: 'Каталог', path: '/catalog' },
     { name: 'О компании', sectionId: 'about' },
     { name: 'Партнёры', sectionId: 'partners' },
     { name: 'Контакты', sectionId: 'contacts' },
   ];
+
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => a.title.localeCompare(b.title, 'ru')),
+    [categories]
+  );
 
   const goToSection = (id: string) => {
     const doScroll = () => {
@@ -51,30 +58,51 @@ const Header: React.FC<HeaderProps> = ({ cartCount }) => {
     >
       <div className="container mx-auto px-6 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <img src="/logos/img/arcmet.png" alt="Logo" className="w-10 h-10" />
+          <img src="/components/img/logo.png" alt="Logo" className="w-10 h-10" />
           <span className="text-xl font-extrabold tracking-tighter text-blue-900">ARCMET</span>
         </Link>
 
         {/* Desktop Nav */}
         <nav className="hidden md:flex items-center gap-8">
+          <div className="relative group">
+            <Link
+              to="/catalog"
+              className="text-sm font-semibold text-blue-900 hover:text-blue-600 transition-colors uppercase tracking-wider inline-flex items-center gap-2"
+            >
+              Каталог <i className="fas fa-chevron-down text-[10px] opacity-70"></i>
+            </Link>
+            {sortedCategories.length > 0 ? (
+              <div className="absolute left-0 top-full pt-4 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto transition-all">
+                <div className="min-w-[260px] rounded-2xl bg-white shadow-2xl border border-gray-100 p-3">
+                  <Link
+                    to="/catalog"
+                    className="block px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-blue-50 rounded-xl transition-all"
+                  >
+                    Все товары
+                  </Link>
+                  <div className="h-px bg-gray-100 my-2" />
+                  {sortedCategories.map((cat) => (
+                    <Link
+                      key={cat.id}
+                      to={`/catalog?cat=${cat.id}`}
+                      className="block px-4 py-2 text-sm text-blue-900 hover:bg-blue-50 rounded-xl transition-all"
+                    >
+                      {cat.title}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
           {navLinks.map(link => (
-            link.sectionId ? (
-              <button
-                key={link.name}
-                onClick={() => goToSection(link.sectionId as string)}
-                className="text-sm font-semibold text-blue-900 hover:text-blue-600 transition-colors uppercase tracking-wider"
-              >
-                {link.name}
-              </button>
-            ) : (
-              <Link 
-                key={link.name} 
-                to={link.path as string} 
-                className="text-sm font-semibold text-blue-900 hover:text-blue-600 transition-colors uppercase tracking-wider"
-              >
-                {link.name}
-              </Link>
-            )
+            <button
+              key={link.name}
+              onClick={() => goToSection(link.sectionId as string)}
+              className="text-sm font-semibold text-blue-900 hover:text-blue-600 transition-colors uppercase tracking-wider"
+            >
+              {link.name}
+            </button>
           ))}
         </nav>
 
@@ -86,9 +114,6 @@ const Header: React.FC<HeaderProps> = ({ cartCount }) => {
                 {cartCount}
               </span>
             )}
-          </Link>
-          <Link to="/admin" className="p-2 text-blue-900 hover:bg-blue-50 rounded-full transition-all" title="Admin">
-            <i className="fas fa-user-shield text-lg"></i>
           </Link>
           <button 
             className="md:hidden p-2 text-blue-900"
@@ -102,25 +127,45 @@ const Header: React.FC<HeaderProps> = ({ cartCount }) => {
       {/* Mobile Menu */}
       {mobileMenuOpen && (
         <div className="md:hidden absolute top-full left-0 w-full bg-white border-t border-gray-100 shadow-xl p-6 flex flex-col gap-4">
+          <div>
+            <button
+              type="button"
+              className="text-lg font-bold text-blue-900 text-left w-full flex items-center justify-between"
+              onClick={() => setMobileCatalogOpen((prev) => !prev)}
+            >
+              Каталог <i className={`fas fa-chevron-${mobileCatalogOpen ? 'up' : 'down'} text-xs`}></i>
+            </button>
+            {mobileCatalogOpen ? (
+              <div className="mt-3 pl-3 flex flex-col gap-3">
+                <Link
+                  to="/catalog"
+                  className="text-base font-semibold text-blue-900"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Все товары
+                </Link>
+                {sortedCategories.map((cat) => (
+                  <Link
+                    key={cat.id}
+                    to={`/catalog?cat=${cat.id}`}
+                    className="text-base text-blue-900/80"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    {cat.title}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
           {navLinks.map(link => (
-            link.sectionId ? (
-              <button
-                key={link.name}
-                className="text-lg font-bold text-blue-900 text-left"
-                onClick={() => { setMobileMenuOpen(false); goToSection(link.sectionId as string); }}
-              >
-                {link.name}
-              </button>
-            ) : (
-              <Link 
-                key={link.name} 
-                to={link.path as string} 
-                className="text-lg font-bold text-blue-900"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                {link.name}
-              </Link>
-            )
+            <button
+              key={link.name}
+              className="text-lg font-bold text-blue-900 text-left"
+              onClick={() => { setMobileMenuOpen(false); goToSection(link.sectionId as string); }}
+            >
+              {link.name}
+            </button>
           ))}
         </div>
       )}

@@ -7,6 +7,7 @@ const path = require("path");
 
 
 const Product = require("../models/Product");
+const CategoryMeta = require("../models/CategoryMeta");
 const Order = require("../models/Order");
 const Lead = require("../models/Lead");
 const { requireAdmin } = require("../middleware/auth");
@@ -74,7 +75,7 @@ router.get("/catalog", requireAdmin, async (req, res) => {
   for (const p of products) {
     const catId = p.category_id;
     if (!categoriesMap.has(catId)) {
-      categoriesMap.set(catId, { id: catId, title: p.category_title, fields: [], items: [] });
+      categoriesMap.set(catId, { id: catId, title: p.category_title, fields: [], items: [], image: "" });
     }
     categoriesMap.get(catId).items.push({
       id: String(p._id),
@@ -91,7 +92,73 @@ router.get("/catalog", requireAdmin, async (req, res) => {
     });
   }
 
+  const catIds = Array.from(categoriesMap.keys());
+  if (catIds.length > 0) {
+    const metas = await CategoryMeta.find({ category_id: { $in: catIds } }).lean();
+    const metaMap = new Map(metas.map((m) => [m.category_id, m]));
+    for (const [id, cat] of categoriesMap.entries()) {
+      const meta = metaMap.get(id);
+      if (meta && meta.image) cat.image = meta.image;
+    }
+  }
+
   res.json({ categories: Array.from(categoriesMap.values()) });
+});
+
+router.get("/categories", requireAdmin, async (req, res) => {
+  const products = await Product.find({ active: true }).select("category_id category_title").lean();
+  const categoriesMap = new Map();
+
+  for (const p of products) {
+    const catId = p.category_id;
+    if (!categoriesMap.has(catId)) {
+      categoriesMap.set(catId, { id: catId, title: p.category_title, image: "" });
+    }
+  }
+
+  const catIds = Array.from(categoriesMap.keys());
+  if (catIds.length > 0) {
+    const metas = await CategoryMeta.find({ category_id: { $in: catIds } }).lean();
+    const metaMap = new Map(metas.map((m) => [m.category_id, m]));
+    for (const [id, cat] of categoriesMap.entries()) {
+      const meta = metaMap.get(id);
+      if (meta && meta.image) cat.image = meta.image;
+      if (meta && meta.title && !cat.title) cat.title = meta.title;
+    }
+  }
+
+  const items = Array.from(categoriesMap.values()).sort((a, b) =>
+    String(a.title || "").localeCompare(String(b.title || ""), "ru")
+  );
+
+  res.json({ categories: items });
+});
+
+router.patch("/categories/:id", requireAdmin, async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  if (!id) return res.status(400).json({ error: "category id required" });
+
+  const image = req.body?.image;
+  const title = req.body?.title;
+
+  const update = { category_id: id };
+  if (image !== undefined) update.image = String(image || "");
+  if (title !== undefined) update.title = String(title || "");
+
+  const saved = await CategoryMeta.findOneAndUpdate(
+    { category_id: id },
+    { $set: update },
+    { upsert: true, new: true }
+  ).lean();
+
+  res.json({
+    ok: true,
+    category: {
+      id: saved.category_id,
+      title: saved.title || "",
+      image: saved.image || ""
+    }
+  });
 });
 
 router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res) => {

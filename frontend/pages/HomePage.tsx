@@ -4,8 +4,9 @@ import { createPortal } from 'react-dom';
 import Hero from '../components/Hero';
 import LeadForm from '../components/LeadForm';
 import PartnersSection from "../components/PartnersSection";
+import AboutSlider from "../components/InfographicSection";
 import { Category, Product } from '../types';
-import { BRAND_LOGOS } from '../constants';
+import { CATEGORY_IMAGES, DEFAULT_CATEGORY_IMAGE } from '../constants';
 import { Link } from 'react-router-dom';
 
 interface HomePageProps {
@@ -15,6 +16,7 @@ interface HomePageProps {
 
 const HomePage: React.FC<HomePageProps> = ({ categories }) => {
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
+
 
   const leadModal = isLeadModalOpen ? (
     <div
@@ -59,45 +61,10 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
     <div className="animate-fade-up">
       <Hero onConsultationClick={() => setIsLeadModalOpen(true)} />
       
-      {/* Featured Products/Categories Section */}
-      <section className="py-20 bg-white" id="about">
-        <div className="container mx-auto px-6">
-          <div className="flex flex-col md:flex-row items-center gap-16 mb-20">
-            <div className="flex-1">
-              <h4 className="text-blue-500 font-bold uppercase tracking-widest mb-4">О компании</h4>
-              <h2 className="text-3xl md:text-5xl font-black text-blue-900 leading-tight mb-6">
-                ТОО <span className="text-blue-600">«ARCMET»</span> — Ваш надежный партнер в мире стройматериалов.
-              </h2>
-              <p className="text-gray-600 text-lg mb-8 leading-relaxed">
-                Мы начали свой путь в 2015 году в Астане. Наша миссия — обеспечить рынок Казахстана высококачественными гидро-, тепло- и звукоизоляционными материалами от ведущих мировых брендов.
-              </p>
-              <div className="grid grid-cols-2 gap-8">
-                <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100">
-                  <div className="text-4xl font-black text-blue-900 mb-2">100%</div>
-                  <div className="text-sm font-bold text-blue-600 uppercase">Качество</div>
-                </div>
-                <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100">
-                  <div className="text-4xl font-black text-blue-900 mb-2">8+ лет</div>
-                  <div className="text-sm font-bold text-blue-600 uppercase">Опыт</div>
-                </div>
-              </div>
-            </div>
-            <div className="flex-1 relative">
-              <div className="rounded-3xl shadow-2xl z-10 relative bg-white p-8">
-                <img 
-                  src="https://images.satu.kz/201518787_w640_h640_201518787.jpg" 
-                  alt="Office" 
-                  className="w-full h-[340px] object-contain rounded-2xl bg-white"
-                />
-              </div>
-              <div className="absolute -bottom-6 -right-6 w-full h-full bg-blue-900/5 rounded-3xl -z-0"></div>
-            </div>
-          </div>
-        </div>
-      </section>
+      <AboutSlider />
 
       {/* Catalog Preview */}
-      <section className="py-24 bg-gray-50 overflow-hidden">
+      <section className="py-24 bg-gray-50 overflow-hidden" id="catalog">
         <div className="container mx-auto px-6">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <h2 className="text-4xl font-black text-blue-900 mb-6 uppercase tracking-tight">Наша продукция</h2>
@@ -106,17 +73,21 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {categories.length > 0 ? (
-              categories.map(cat => (
-                <div key={cat.id} className="group bg-white p-8 rounded-3xl shadow-sm hover:shadow-xl transition-all border border-gray-100 hover:border-blue-200">
-                  <div className="w-full h-14 flex items-center justify-start mb-6">
-                    <div className="w-36 h-14 bg-white rounded-2xl border border-gray-100 flex items-center justify-center">
-                      <img
-                        src={(BRAND_LOGOS as any)[cat.id]?.src || "/logos/default.svg"}
-                        alt={cat.title}
-                        className="max-h-10 max-w-[140px] object-contain"
-                      />
-                    </div>
+              categories.map(cat => {
+                const firstItemImage = cat.items.find((item) => item.image)?.image;
+                const imageSrc = cat.image || firstItemImage || CATEGORY_IMAGES[cat.id] || DEFAULT_CATEGORY_IMAGE;
+
+                return (
+                <div key={cat.id} className="group bg-white rounded-3xl shadow-sm hover:shadow-xl transition-all border border-gray-100 hover:border-blue-200 overflow-hidden">
+                  <div className="relative aspect-square w-full bg-white">
+                    <img
+                      src={imageSrc}
+                      alt={cat.title}
+                      className="h-full w-full object-contain p-6"
+                      loading="lazy"
+                    />
                   </div>
+                  <div className="p-8">
                   <h3 className="text-2xl font-bold text-blue-900 mb-4">{cat.title}</h3>
                   <p className="text-gray-500 mb-8 text-sm line-clamp-3">Надежные материалы для строительства и ремонта. Ознакомьтесь с полным ассортиментом продукции бренда {cat.title}.</p>
                   <Link 
@@ -125,8 +96,10 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
                   >
                     Перейти в каталог <i className="fas fa-arrow-right"></i>
                   </Link>
+                  </div>
                 </div>
-              ))
+              );
+              })
             ) : (
               <div className="col-span-full py-12 text-center bg-white rounded-3xl shadow-inner text-gray-400">
                 Загрузите товары в админ панели для отображения здесь.
@@ -153,7 +126,7 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
                   </div>
                   <div>
                     <div className="text-blue-300 text-xs font-bold uppercase mb-1">Телефон</div>
-                    <a href="tel:+77007978533" className="text-xl font-bold">+7 700 797 85 33</a>
+                    <a href="tel:+77077978533" className="text-xl font-bold">+7 707 797 85 33</a>
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
@@ -162,7 +135,7 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
                   </div>
                   <div>
                     <div className="text-blue-300 text-xs font-bold uppercase mb-1">Email</div>
-                    <a href="mailto:info@arcmet.kz" className="text-xl font-bold">info@arcmet.kz</a>
+                    <a href="mailto:ceo@arcmet.kz" className="text-xl font-bold">ceo@arcmet.kz</a>
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
@@ -171,15 +144,30 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
                   </div>
                   <div>
                     <div className="text-blue-300 text-xs font-bold uppercase mb-1">Адрес</div>
-                    <span className="text-xl font-bold">г. Астана, ул. С. Сейфуллин, 27/3</span>
+                    <span className="text-xl font-bold">Талапкерская 26а, офис 202</span>
                   </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-3xl shadow-2xl text-gray-900 mt-12">
+                <div className="px-4 pt-4 pb-2 text-sm font-bold text-blue-900 uppercase tracking-widest">Мы на карте</div>
+                <div className="overflow-hidden rounded-2xl border border-gray-100">
+                  <iframe
+                    title="ARCMET location"
+                    src="https://www.google.com/maps?q=%D0%A2%D0%B0%D0%BB%D0%B0%D0%BF%D0%BA%D0%B5%D1%80%D1%81%D0%BA%D0%B0%D1%8F%2026%D0%B0%2C%20%D0%BE%D1%84%D0%B8%D1%81%20202&output=embed"
+                    className="w-full h-64"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
                 </div>
               </div>
             </div>
 
-            <div className="bg-white p-10 rounded-3xl shadow-2xl text-gray-900">
-              <h3 className="text-2xl font-bold text-blue-900 mb-8">Быстрая заявка</h3>
-              <LeadForm />
+            <div className="space-y-8">
+              <div className="bg-white p-10 rounded-3xl shadow-2xl text-gray-900">
+                <h3 className="text-2xl font-bold text-blue-900 mb-8">Быстрая заявка</h3>
+                <LeadForm />
+              </div>
             </div>
           </div>
         </div>
