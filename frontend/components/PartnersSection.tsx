@@ -1,19 +1,29 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 
+import qsLogo from './img/qs.png';
+import simbolLogo from './img/sembol.png';
+import sskLogo from './img/ssk.jpg';
+import svoyLogo from './img/svoy.png';
+import aigulLogo from './img/aigul.png';
+import astanaLogo from './img/astana.png';
+import biGroupLogo from './img/Bi-group.png';
+import mamyrLogo from './img/mamyr.jpg';
+import megaLogo from './img/MEGA.png';
+
 const PartnersSection: React.FC = () => {
   const trackRef = useRef<HTMLDivElement | null>(null);
 
   const logos = useMemo(
     () => [
-      '/components/img/qs.png',
-      '/components/img/sembol.png',
-      '/components/img/ssk.jpg',
-      '/components/img/svoy.png',
-      '/components/img/aigul.png',
-      '/components/img/astana.png',
-      '/components/img/Bi-group.png',
-      '/components/img/mamyr.jpg',
-      '/components/img/MEGA.png'
+      qsLogo,
+      simbolLogo,
+      sskLogo,
+      svoyLogo,
+      aigulLogo,
+      astanaLogo,
+      biGroupLogo,
+      mamyrLogo,
+      megaLogo
     ],
     []
   );
