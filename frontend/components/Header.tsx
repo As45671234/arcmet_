@@ -58,7 +58,7 @@ const Header: React.FC<HeaderProps> = ({ cartCount, categories }) => {
     >
       <div className="container mx-auto px-6 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <img src="/components/img/logo.png" alt="Logo" className="w-10 h-10" />
+          <img src="/logos/logo.png" alt="Logo" className="w-10 h-10" />
           <span className="text-xl font-extrabold tracking-tighter text-blue-900">ARCMET</span>
         </Link>
 
