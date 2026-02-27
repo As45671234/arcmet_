@@ -5,15 +5,15 @@ const PartnersSection: React.FC = () => {
 
   const logos = useMemo(
     () => [
-      'components/img/qs.png',
-      'components/img/sembol.png',
-      'components/img/ssk.jpg',
-      'components/img/svoy.png',
-      'components/img/aigul.png',
-      'components/img/astana.png',
-      'components/img/Bi-group.png',
-      'components/img/mamyr.jpg',
-      'components/img/MEGA.png'
+      '/components/img/qs.png',
+      '/components/img/sembol.png',
+      '/components/img/ssk.jpg',
+      '/components/img/svoy.png',
+      '/components/img/aigul.png',
+      '/components/img/astana.png',
+      '/components/img/Bi-group.png',
+      '/components/img/mamyr.jpg',
+      '/components/img/MEGA.png'
     ],
     []
   );
