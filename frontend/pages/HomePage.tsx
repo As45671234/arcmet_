@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Hero from '../components/Hero';
 import LeadForm from '../components/LeadForm';
@@ -8,14 +8,173 @@ import AboutSlider from "../components/InfographicSection";
 import { Category, Product } from '../types';
 import { CATEGORY_IMAGES, DEFAULT_CATEGORY_IMAGE } from '../constants';
 import { Link } from 'react-router-dom';
+import penoplexProduct01 from '../components/img/company/penoplex-product-01.jpg';
+import brandPlastfoil from '../components/img/company/plastoil.webp';
+import brandPanelsan from '../components/img/company/panelsan.png';
+import brandFachmann from '../components/img/company/fachman.jpeg';
+import brandRheinzink from '../components/img/company/brand-rheinzink.jpg';
+import brandAkfa from '../components/img/company/brand-akfa.jpg';
 
 interface HomePageProps {
   categories: Category[];
   onAddToCart: (p: Product) => void;
 }
 
+const LOCAL_CATEGORY_IMAGES: Record<string, string> = {
+  plastfoil: brandPlastfoil,
+  penoplex: penoplexProduct01,
+  rheinzink: brandRheinzink,
+  fachmann: brandFachmann,
+  panelsan: brandPanelsan,
+  akfa: brandAkfa,
+  skyplast: brandRheinzink,
+  protan: brandRheinzink,
+  uteplitel: penoplexProduct01,
+  default: brandPlastfoil,
+};
+
+const BRAND_ORDER = [
+  'plastfoil',
+  'panelsan',
+  'fachmann',
+  'rheinzink',
+  'penoplex',
+  'akfa',
+] as const;
+
+const BRAND_TITLES: Record<(typeof BRAND_ORDER)[number], string> = {
+  plastfoil: 'PLASTFOIL',
+  panelsan: 'PANELSAN',
+  fachmann: 'FACHMANN',
+  rheinzink: 'RHEINZINK',
+  penoplex: 'ПЕНОПЛЭКС',
+  akfa: 'AKFA BUILD',
+};
+
+const BRAND_DESCRIPTIONS: Record<(typeof BRAND_ORDER)[number], string> = {
+  plastfoil: 'ПВХ-мембраны и комплектующие для надежной гидроизоляции кровель и подземных конструкций.',
+  panelsan: 'Сэндвич-панели и фасадные решения для быстровозводимых и энергоэффективных объектов.',
+  fachmann: 'Профессиональные комплектующие и инженерные элементы для кровельных систем.',
+  rheinzink: 'Премиальные решения для кровли и фасада с высокой долговечностью и архитектурной выразительностью.',
+  penoplex: 'Эффективная теплоизоляция с высокой прочностью, низким водопоглощением и долгим сроком службы.',
+  akfa: 'Профильные системы и строительные решения для современных коммерческих и жилых проектов.',
+};
+
+const BRAND_IMAGE_FALLBACKS: Record<(typeof BRAND_ORDER)[number], string> = {
+  plastfoil: brandPlastfoil,
+  panelsan: brandPanelsan,
+  fachmann: brandFachmann,
+  rheinzink: brandRheinzink,
+  penoplex: penoplexProduct01,
+  akfa: brandAkfa,
+};
+
+const normalizeBrandKey = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/\s+/g, '')
+    .replace(/[-_]+/g, '');
+
+const resolveBrandKey = (input: { id?: string; title?: string }) => {
+  const idKey = normalizeBrandKey(input.id || '');
+  const titleKey = normalizeBrandKey(input.title || '');
+  const combined = `${idKey} ${titleKey}`;
+
+  if (combined.includes('plastfoil') || combined.includes('plastoil')) return 'plastfoil';
+  if (combined.includes('panelsan')) return 'panelsan';
+  if (combined.includes('fachmann')) return 'fachmann';
+  if (combined.includes('rheinzink')) return 'rheinzink';
+  if (combined.includes('penoplex') || combined.includes('пеноплекс')) return 'penoplex';
+  if (combined.includes('akfabuild') || combined.includes('akfa')) return 'akfa';
+
+  return null;
+};
+
+const DEFAULT_PRODUCT_SLIDES = [
+  {
+    id: 'plastfoil',
+    title: BRAND_TITLES.plastfoil,
+    image: BRAND_IMAGE_FALLBACKS.plastfoil,
+    description: BRAND_DESCRIPTIONS.plastfoil,
+  },
+  {
+    id: 'panelsan',
+    title: BRAND_TITLES.panelsan,
+    image: BRAND_IMAGE_FALLBACKS.panelsan,
+    description: BRAND_DESCRIPTIONS.panelsan,
+  },
+  {
+    id: 'fachmann',
+    title: BRAND_TITLES.fachmann,
+    image: BRAND_IMAGE_FALLBACKS.fachmann,
+    description: BRAND_DESCRIPTIONS.fachmann,
+  },
+  {
+    id: 'rheinzink',
+    title: BRAND_TITLES.rheinzink,
+    image: BRAND_IMAGE_FALLBACKS.rheinzink,
+    description: BRAND_DESCRIPTIONS.rheinzink,
+  },
+  {
+    id: 'penoplex',
+    title: BRAND_TITLES.penoplex,
+    image: BRAND_IMAGE_FALLBACKS.penoplex,
+    description: BRAND_DESCRIPTIONS.penoplex,
+  },
+  {
+    id: 'akfa',
+    title: BRAND_TITLES.akfa,
+    image: BRAND_IMAGE_FALLBACKS.akfa,
+    description: BRAND_DESCRIPTIONS.akfa,
+  },
+];
+
 const HomePage: React.FC<HomePageProps> = ({ categories }) => {
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
+  const [activeProductIndex, setActiveProductIndex] = useState(0);
+  const catalogTrackRef = useRef<HTMLDivElement | null>(null);
+  const wheelLockRef = useRef(false);
+  const wheelDeltaAccumulatorRef = useRef(0);
+  const activeIndexRef = useRef(0);
+  const slidesCountRef = useRef(0);
+  const lastSwitchTsRef = useRef(0);
+  const lastWheelEventTsRef = useRef(0);
+
+  const matchedSlides = categories
+    .map((cat) => {
+      const brandKey = resolveBrandKey({ id: cat.id, title: cat.title });
+      if (!brandKey) return null;
+
+      return {
+        id: cat.id || brandKey,
+        brandKey,
+        title: BRAND_TITLES[brandKey],
+        image:
+          BRAND_IMAGE_FALLBACKS[brandKey] ||
+          LOCAL_CATEGORY_IMAGES[cat.id] ||
+          CATEGORY_IMAGES[cat.id] ||
+          LOCAL_CATEGORY_IMAGES.default ||
+          DEFAULT_CATEGORY_IMAGE,
+        description: BRAND_DESCRIPTIONS[brandKey],
+      };
+    })
+    .filter((slide): slide is NonNullable<typeof slide> => Boolean(slide))
+    .sort(
+      (a, b) =>
+        BRAND_ORDER.indexOf(a.brandKey) - BRAND_ORDER.indexOf(b.brandKey)
+    );
+
+  // Always use curated DEFAULT_PRODUCT_SLIDES with 6 brands for consistent display
+  const productSlides = DEFAULT_PRODUCT_SLIDES;
+
+  const safeActiveProductIndex = Math.min(
+    Math.max(activeProductIndex, 0),
+    Math.max(productSlides.length - 1, 0)
+  );
+  const activeSlide =
+    productSlides[safeActiveProductIndex] ||
+    DEFAULT_PRODUCT_SLIDES[0];
 
 
   const leadModal = isLeadModalOpen ? (
@@ -57,6 +216,107 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isLeadModalOpen]);
 
+  useEffect(() => {
+    if (productSlides.length === 0) {
+      setActiveProductIndex(0);
+      return;
+    }
+    setActiveProductIndex((prev) => Math.min(prev, productSlides.length - 1));
+  }, [productSlides.length]);
+
+  useEffect(() => {
+    activeIndexRef.current = activeProductIndex;
+    wheelDeltaAccumulatorRef.current = 0;
+  }, [activeProductIndex]);
+
+  useEffect(() => {
+    slidesCountRef.current = productSlides.length;
+  }, [productSlides.length]);
+
+  useEffect(() => {
+    const onGlobalWheel = (event: WheelEvent) => {
+      const trackEl = catalogTrackRef.current;
+      if (!trackEl) return;
+      if (slidesCountRef.current < 2) return;
+
+      const rect = trackEl.getBoundingClientRect();
+      const stickyTop = 96;
+      const inStickyZone = rect.top <= stickyTop + 12 && rect.bottom >= stickyTop + 260;
+      if (!inStickyZone) return;
+
+      // Normalize delta based on deltaMode
+      let normalizedDelta = event.deltaY;
+      if (event.deltaMode === 1) {
+        // Line mode (rare) - convert to pixels
+        normalizedDelta = event.deltaY * 16;
+      } else if (event.deltaMode === 2) {
+        // Page mode (very rare) - convert to pixels
+        normalizedDelta = event.deltaY * window.innerHeight;
+      }
+      // deltaMode === 0 is pixel mode (most common for both mouse and trackpad)
+
+      if (Math.abs(normalizedDelta) < 0.1) return;
+
+      const currentIndex = activeIndexRef.current;
+      const lastIndex = slidesCountRef.current - 1;
+      const direction = normalizedDelta > 0 ? 1 : -1;
+      const atFirst = currentIndex <= 0;
+      const atLast = currentIndex >= lastIndex;
+      const atBoundary = (direction > 0 && atLast) || (direction < 0 && atFirst);
+
+      if (atBoundary) {
+        wheelDeltaAccumulatorRef.current = 0;
+        return;
+      }
+
+      event.preventDefault();
+
+      const now = performance.now();
+      const timeSinceLastWheelEvent = now - lastWheelEventTsRef.current;
+      lastWheelEventTsRef.current = now;
+      
+      // Reset accumulator if too much time passed (user stopped scrolling)
+      if (timeSinceLastWheelEvent > 180) {
+        wheelDeltaAccumulatorRef.current = 0;
+      }
+
+      // If we're in cooldown after a slide switch, ignore
+      if (wheelLockRef.current) {
+        return;
+      }
+
+      // Accumulate delta for both mouse and trackpad
+      wheelDeltaAccumulatorRef.current += normalizedDelta;
+      
+      // Threshold: 
+      // - Mouse wheel usually gives 100px per click -> triggers immediately
+      // - Trackpad gives 3-8px per event -> needs 6-15 events to reach 50px
+      const threshold = 50;
+      
+      if (Math.abs(wheelDeltaAccumulatorRef.current) >= threshold) {
+        wheelLockRef.current = true;
+        lastSwitchTsRef.current = now;
+        wheelDeltaAccumulatorRef.current = 0;
+
+        setActiveProductIndex((prev) =>
+          direction > 0
+            ? Math.min(prev + 1, lastIndex)
+            : Math.max(prev - 1, 0)
+        );
+
+        // Cooldown period before next slide can be triggered
+        window.setTimeout(() => {
+          wheelLockRef.current = false;
+        }, 400);
+      }
+    };
+
+    window.addEventListener('wheel', onGlobalWheel, { passive: false });
+    return () => {
+      window.removeEventListener('wheel', onGlobalWheel);
+    };
+  }, []);
+
   return (
     <div className="animate-fade-up">
       <Hero onConsultationClick={() => setIsLeadModalOpen(true)} />
@@ -65,46 +325,71 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
 
       {/* Catalog Preview */}
       <section className="py-24 bg-gray-50 overflow-hidden" id="catalog">
-        <div className="container mx-auto px-6">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-4xl font-black text-blue-900 mb-6 uppercase tracking-tight">Наша продукция</h2>
-            <p className="text-gray-600 text-lg">Выбирайте лучшее для своих проектов. Мы работаем с проверенными брендами: PLASTFOIL, RHEINZINK, ПЕНОПЛЭКС, FACHMANN.</p>
-          </div>
+        <div
+          ref={catalogTrackRef}
+          className="container mx-auto px-6"
+          style={{ minHeight: 'calc(100vh + 2rem)' }}
+        >
+          <div
+            className="sticky top-24 h-[calc(100vh-7rem)] rounded-[2rem] overflow-hidden border border-gray-200 bg-white"
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-2 h-full min-h-[560px]">
+                <div className="relative bg-gray-100 p-8 md:p-12 lg:p-16 pr-16 lg:pr-24 flex items-center">
+                  <div className="max-w-xl">
+                    <h2 className="text-4xl md:text-5xl font-black text-gray-800 uppercase tracking-tight leading-tight">
+                      Наша продукция
+                    </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {categories.length > 0 ? (
-              categories.map(cat => {
-                const firstItemImage = cat.items.find((item) => item.image)?.image;
-                const imageSrc = cat.image || firstItemImage || CATEGORY_IMAGES[cat.id] || DEFAULT_CATEGORY_IMAGE;
+                    <div className="text-7xl md:text-8xl font-light text-gray-400 mt-10">
+                      {String(safeActiveProductIndex + 1).padStart(2, '0')}
+                    </div>
 
-                return (
-                <div key={cat.id} className="group bg-white rounded-3xl shadow-sm hover:shadow-xl transition-all border border-gray-100 hover:border-blue-200 overflow-hidden">
-                  <div className="relative aspect-square w-full bg-white">
-                    <img
-                      src={imageSrc}
-                      alt={cat.title}
-                      className="h-full w-full object-contain p-6"
-                      loading="lazy"
-                    />
+                    <h3 className="text-3xl md:text-4xl font-semibold text-gray-700 mt-12 uppercase tracking-wide">
+                      {activeSlide.title}
+                    </h3>
+                    <p className="text-gray-500 text-lg leading-relaxed mt-6 max-w-lg">
+                      {activeSlide.description}
+                    </p>
+
+                    <Link
+                      to={`/catalog?cat=${activeSlide.id}`}
+                      className="inline-flex items-center gap-2 mt-10 text-blue-600 font-bold hover:gap-4 transition-all"
+                    >
+                      Перейти в каталог <i className="fas fa-arrow-right"></i>
+                    </Link>
                   </div>
-                  <div className="p-8">
-                  <h3 className="text-2xl font-bold text-blue-900 mb-4">{cat.title}</h3>
-                  <p className="text-gray-500 mb-8 text-sm line-clamp-3">Надежные материалы для строительства и ремонта. Ознакомьтесь с полным ассортиментом продукции бренда {cat.title}.</p>
-                  <Link 
-                    to={`/catalog?cat=${cat.id}`} 
-                    className="inline-flex items-center gap-2 text-blue-600 font-bold hover:gap-4 transition-all"
-                  >
-                    Перейти в каталог <i className="fas fa-arrow-right"></i>
-                  </Link>
-                  </div>
+
+                  {productSlides.length > 1 ? (
+                    <div className="absolute right-6 md:right-8 top-1/2 -translate-y-1/2 flex flex-col gap-4">
+                      {productSlides.map((slide, index) => (
+                        <button
+                          key={slide.id}
+                          type="button"
+                          onClick={() => setActiveProductIndex(index)}
+                          className="w-3 h-8 flex items-center justify-center"
+                          aria-label={`Показать слайд ${index + 1}`}
+                        >
+                          <span
+                            className={[
+                              'block w-1 rounded-full transition-all',
+                              index === safeActiveProductIndex ? 'h-8 bg-orange-500' : 'h-2 bg-gray-300',
+                            ].join(' ')}
+                          ></span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-              );
-              })
-            ) : (
-              <div className="col-span-full py-12 text-center bg-white rounded-3xl shadow-inner text-gray-400">
-                Загрузите товары в админ панели для отображения здесь.
+
+                <div className="relative min-h-[320px] h-full bg-white">
+                  <img
+                    src={activeSlide.image}
+                    alt={activeSlide.title}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
               </div>
-            )}
           </div>
         </div>
       </section>
