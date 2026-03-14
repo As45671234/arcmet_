@@ -56,6 +56,21 @@ function parseIntSafe(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+function cellRefToRowCol(cellRef) {
+  const m = String(cellRef || "").toUpperCase().match(/^([A-Z]+)(\d+)$/);
+  if (!m) return null;
+  const letters = m[1];
+  const row = parseIntSafe(m[2]);
+  if (row === null) return null;
+
+  let col = 0;
+  for (const ch of letters) {
+    col = col * 26 + (ch.charCodeAt(0) - 64);
+  }
+
+  return { row, col };
+}
+
 async function extractImagesXlsx(buffer) {
   // Returns map:
   //  - `${sheetName}|${row}` -> { buf, ext }
@@ -231,7 +246,216 @@ async function extractImagesXlsx(buffer) {
 
   return map;
 }
-const { slugify, parseNumber, isRowEmpty, rowNonEmptyCount } = require("../utils");
+
+async function extractRichValueImagesXlsx(buffer) {
+  const map = new Map();
+  let JSZip;
+  try { JSZip = require("jszip"); } catch (e) { return map; }
+
+  let zip;
+  try { zip = await JSZip.loadAsync(buffer); } catch (e) { return map; }
+
+  const richValueRelXml = zip.file("xl/richData/richValueRel.xml")
+    ? await zip.file("xl/richData/richValueRel.xml").async("string")
+    : "";
+  const richValueRelRelsXml = zip.file("xl/richData/_rels/richValueRel.xml.rels")
+    ? await zip.file("xl/richData/_rels/richValueRel.xml.rels").async("string")
+    : "";
+  const richValueXml = zip.file("xl/richData/rdrichvalue.xml")
+    ? await zip.file("xl/richData/rdrichvalue.xml").async("string")
+    : "";
+  const metadataXml = zip.file("xl/metadata.xml")
+    ? await zip.file("xl/metadata.xml").async("string")
+    : "";
+  const workbookXml = zip.file("xl/workbook.xml")
+    ? await zip.file("xl/workbook.xml").async("string")
+    : "";
+  const wbRelsXml = zip.file("xl/_rels/workbook.xml.rels")
+    ? await zip.file("xl/_rels/workbook.xml.rels").async("string")
+    : "";
+
+  if (!richValueRelXml || !richValueRelRelsXml || !richValueXml || !metadataXml || !workbookXml || !wbRelsXml) {
+    return map;
+  }
+
+  const richRelOrder = [];
+  const richRelTagRe = /<rel\b[^>]*r:id="([^"]+)"[^>]*\/>/gi;
+  let relOrderMatch;
+  while ((relOrderMatch = richRelTagRe.exec(richValueRelXml))) {
+    richRelOrder.push(relOrderMatch[1]);
+  }
+
+  const relTargetMap = {};
+  const relTagRe = /<Relationship\b[^>]*>/gi;
+  let relMatch;
+  while ((relMatch = relTagRe.exec(richValueRelRelsXml))) {
+    const tag = relMatch[0];
+    const id = getAttr(tag, "Id");
+    const target = getAttr(tag, "Target");
+    if (id && target) relTargetMap[id] = target;
+  }
+
+  const localImageObjects = [];
+  const rvRe = /<rv\b[^>]*>[\s\S]*?<\/rv>/gi;
+  let rvMatch;
+  while ((rvMatch = rvRe.exec(richValueXml))) {
+    const block = rvMatch[0];
+    const values = Array.from(block.matchAll(/<v>([\s\S]*?)<\/v>/gi)).map((m) => String(m[1] || "").trim());
+    const relIndex = parseIntSafe(values[0]);
+    if (relIndex === null) {
+      localImageObjects.push(null);
+      continue;
+    }
+
+    const rid = richRelOrder[relIndex];
+    const target = rid ? relTargetMap[rid] : "";
+    if (!target) {
+      localImageObjects.push(null);
+      continue;
+    }
+
+    const parts = (`xl/richData/${target}`).split("/");
+    const norm = [];
+    for (const p of parts) {
+      if (p === "..") norm.pop();
+      else if (p === "." || !p) continue;
+      else norm.push(p);
+    }
+    const mediaPath = norm.join("/");
+    const file = zip.file(mediaPath);
+    if (!file) {
+      localImageObjects.push(null);
+      continue;
+    }
+
+    const buf = await file.async("nodebuffer");
+    const ext = String((mediaPath.split(".").pop() || "png")).toLowerCase();
+    const safeExt = ["png", "jpg", "jpeg", "webp", "gif", "bmp"].includes(ext) ? ext : "png";
+    localImageObjects.push(buf && buf.length ? { buf, ext: safeExt } : null);
+  }
+
+  const vmToRichIndex = {};
+  const valueMetadataMatch = metadataXml.match(/<valueMetadata\b[^>]*>([\s\S]*?)<\/valueMetadata>/i);
+  if (valueMetadataMatch) {
+    const bkBlocks = valueMetadataMatch[1].match(/<bk>[\s\S]*?<\/bk>/gi) || [];
+    bkBlocks.forEach((bk, idx) => {
+      const rc = bk.match(/<rc\b[^>]*v="(\d+)"[^>]*\/>/i);
+      if (rc) vmToRichIndex[idx + 1] = parseIntSafe(rc[1]);
+    });
+  }
+
+  const wbRelMap = {};
+  let wbRelMatch;
+  while ((wbRelMatch = relTagRe.exec(wbRelsXml))) {
+    const tag = wbRelMatch[0];
+    const id = getAttr(tag, "Id");
+    const target = getAttr(tag, "Target");
+    if (id && target) wbRelMap[id] = target.replace(/^\/+/, "");
+  }
+
+  const sheetRe = /<sheet\b[^>]*>/gi;
+  let sheetMatch;
+  const sheets = [];
+  while ((sheetMatch = sheetRe.exec(workbookXml))) {
+    const tag = sheetMatch[0];
+    const name = getAttr(tag, "name") || "Sheet";
+    const rid = getAttr(tag, "r:id") || getAttr(tag, "id");
+    const target = rid ? wbRelMap[rid] : "";
+    if (!target) continue;
+    const sheetPath = target.startsWith("xl/") ? target : `xl/${target}`;
+    sheets.push({ name: String(name).trim() || "Sheet", sheetPath });
+  }
+
+  for (const sh of sheets) {
+    const sheetXml = zip.file(sh.sheetPath) ? await zip.file(sh.sheetPath).async("string") : "";
+    if (!sheetXml) continue;
+
+    const cellTags = sheetXml.match(/<c\b[^>]*>/gi) || [];
+    for (const tag of cellTags) {
+      const vm = parseIntSafe(getAttr(tag, "vm"));
+      const cellRef = getAttr(tag, "r");
+      if (vm === null || !cellRef) continue;
+
+      const richIndex = vmToRichIndex[vm];
+      if (richIndex === undefined || richIndex === null) continue;
+      const imageObj = localImageObjects[richIndex];
+      if (!imageObj) continue;
+
+      const pos = cellRefToRowCol(cellRef);
+      if (!pos) continue;
+
+      const rowKey = `${sh.name}|${pos.row}`;
+      const cellKey = `${sh.name}|${pos.row}|${pos.col}`;
+      map.set(cellKey, imageObj);
+      if (!map.has(rowKey)) map.set(rowKey, imageObj);
+    }
+  }
+
+  return map;
+}
+
+async function extractImagesExcelJs(buffer) {
+  const map = new Map();
+  let ExcelJS;
+  try { ExcelJS = require("exceljs"); } catch (e) { return map; }
+
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(buffer);
+  } catch (e) {
+    return map;
+  }
+
+  const mediaList = Array.isArray(workbook.model?.media) ? workbook.model.media : [];
+  const mediaById = new Map();
+  for (const media of mediaList) {
+    if (media?.index !== undefined) mediaById.set(Number(media.index), media);
+    if (media?.id !== undefined) mediaById.set(Number(media.id), media);
+  }
+
+  for (const worksheet of workbook.worksheets || []) {
+    const sheetName = String(worksheet?.name || "").trim();
+    if (!sheetName || typeof worksheet.getImages !== "function") continue;
+
+    const images = worksheet.getImages();
+    for (const imageRef of images) {
+      const range = imageRef?.range || {};
+      const tl = range.tl || {};
+      const br = range.br || {};
+
+      const fromRow = Number.isFinite(tl.nativeRow) ? tl.nativeRow : null;
+      const fromCol = Number.isFinite(tl.nativeCol) ? tl.nativeCol : null;
+      const toRow = Number.isFinite(br.nativeRow) ? br.nativeRow : fromRow;
+      const toCol = Number.isFinite(br.nativeCol) ? br.nativeCol : fromCol;
+      if (fromRow === null || fromCol === null) continue;
+
+      const rowZero = Number.isFinite(toRow) ? Math.round((fromRow + toRow) / 2) : fromRow;
+      const colZero = Number.isFinite(toCol) ? Math.round((fromCol + toCol) / 2) : fromCol;
+      const row1 = rowZero + 1;
+      const col1 = colZero + 1;
+
+      const media = mediaById.get(Number(imageRef.imageId));
+      if (!media) continue;
+
+      let buf = null;
+      if (Buffer.isBuffer(media.buffer)) buf = media.buffer;
+      else if (typeof media.base64 === "string" && media.base64) buf = Buffer.from(media.base64, "base64");
+      if (!buf || !buf.length) continue;
+
+      const ext = String(media.extension || media.type || "png").replace(/^\./, "").toLowerCase();
+      const safeExt = ["png", "jpg", "jpeg", "webp", "gif", "bmp"].includes(ext) ? ext : "png";
+      const obj = { buf, ext: safeExt };
+
+      const rowKey = `${sheetName}|${row1}`;
+      const cellKey = `${sheetName}|${row1}|${col1}`;
+      if (!map.has(cellKey)) map.set(cellKey, obj);
+      if (!map.has(rowKey)) map.set(rowKey, obj);
+    }
+  }
+
+  return map;
+}
+const { slugify, parseNumber, isRowEmpty, rowNonEmptyCount, getImportSupplier, buildProductKey } = require("../utils");
 
 const KNOWN_CATEGORIES = [
   "Утеплитель",
@@ -259,19 +483,28 @@ const PENOPLEX_GROUP_WORDS = [
 function normalizeHeader(h) {
   return String(h || "")
     .toLowerCase()
+    .replace(/[._]+/g, " ")
+    .replace(/\s*\/\s*/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function buildHeaderMap(headerRow) {
-  const map = {};
+  const map = { imageColumns: [] };
   for (let i = 0; i < headerRow.length; i++) {
     const h = normalizeHeader(headerRow[i]);
     if (!h) continue;
 
     if (h.includes("артикул")) map.sku = i;
-    if (h === "наименование" || h.includes("наименование материала") || h.includes("наименование")) map.name = i;
+    if (
+      h === "наименование" ||
+      h.includes("наименование материала") ||
+      h.includes("наименование") ||
+      h.includes("номенклатур")
+    ) map.name = i;
     if (h.includes("описание")) map.description = i;
+    if (/(^ед\s*изм$)|(^ед\s*изм\s*$)|(^единица\s*измерения$)|(^ед\s*изм\b)/i.test(h)) map.unit = i;
+    if (h.includes("количеств") || h === "остаток") map.quantity = i;
 
     if (h.includes("толщина")) map.thickness = i;
     if (h.includes("размер")) map.size = i;
@@ -289,7 +522,11 @@ function buildHeaderMap(headerRow) {
 
     if (h.includes("кратность")) map.pack_qty = i;
     if (h.includes("маркировка")) map.marking = i;
-    if (h.includes("изображение")) map.image = i;
+    if (h.includes("изображение") || h.includes("картинк") || h.includes("фото")) {
+      const numMatch = h.match(/(\d+)/);
+      if (numMatch) map.imageColumns.push(i);
+      else map.image = i;
+    }
 
     // prices
     if (h === "цена" || h.includes("цена ")) map.price_any = map.price_any || i;
@@ -308,8 +545,10 @@ function looksLikeHeaderRow(row) {
   const joined = row.map((c) => normalizeHeader(c)).join(" | ");
   return (
     joined.includes("наименование") ||
+    joined.includes("номенклатур") ||
     joined.includes("артикул") ||
     joined.includes("цена") ||
+    joined.includes("ед изм") ||
     (joined.includes("толщина") && joined.includes("упаков"))
   );
 }
@@ -356,28 +595,92 @@ function pickCategoryFromTitle(title) {
   return found ? t : null;
 }
 
-async function workbookToProducts({ buffer, filename, imagesDir }) {
+function uniqueNonEmpty(list) {
+  return Array.from(new Set((list || []).map((item) => String(item || "").trim()).filter(Boolean)));
+}
+
+function saveEmbeddedImage({ imageObj, imagesDir, baseName }) {
+  if (!imageObj || !imageObj.buf || !imagesDir) return "";
+  if (!fs.existsSync(imagesDir)) fs.mkdirSync(imagesDir, { recursive: true });
+
+  const baseSlug = slugify(baseName || "image") || "image";
+  const ext = String(imageObj.ext || "png").toLowerCase();
+  const safeExt = ["png","jpg","jpeg","webp","gif","bmp"].includes(ext) ? ext : "png";
+
+  let fileName = `${baseSlug}.${safeExt}`;
+  let outPath = path.join(imagesDir, fileName);
+  let idx = 2;
+  while (fs.existsSync(outPath)) {
+    fileName = `${baseSlug}-${idx}.${safeExt}`;
+    outPath = path.join(imagesDir, fileName);
+    idx++;
+  }
+
+  fs.writeFileSync(outPath, imageObj.buf);
+  return `/uploads/products/${fileName}`;
+}
+
+function resolveEmbeddedImage({ imagesByRow, sheetName, excelRow, columnIndex, strictColumn, usedKeys, sameRowOnly }) {
+  const rowCandidates = sameRowOnly
+    ? [excelRow]
+    : [excelRow, excelRow + 1, excelRow - 1, excelRow + 2, excelRow - 2].filter((x) => x > 0);
+
+  if (columnIndex !== undefined && columnIndex !== null) {
+    const col1 = columnIndex + 1;
+    const colCandidates = [col1, col1 - 1, col1 + 1, col1 - 2, col1 + 2].filter((x) => x > 0);
+
+    for (const rr of rowCandidates) {
+      for (const cc of colCandidates) {
+        const cellKey = `${sheetName}|${rr}|${cc}`;
+        if (!imagesByRow.has(cellKey)) continue;
+        if (usedKeys && usedKeys.has(cellKey)) continue;
+        if (usedKeys) usedKeys.add(cellKey);
+        return imagesByRow.get(cellKey);
+      }
+    }
+
+    if (strictColumn) return null;
+  }
+
+  for (const rr of rowCandidates) {
+    const rowKey = `${sheetName}|${rr}`;
+    if (!imagesByRow.has(rowKey)) continue;
+    if (usedKeys && usedKeys.has(rowKey)) continue;
+    if (usedKeys) usedKeys.add(rowKey);
+    return imagesByRow.get(rowKey);
+  }
+
+  return null;
+}
+
+async function workbookToProducts({ buffer, filename, imagesDir, supplier }) {
   const wb = XLSX.read(buffer, { type: "buffer" });
   const products = [];
+  const supplierMeta = supplier ? getImportSupplier(supplier) : null;
 
   const isXlsx = filename && String(filename).toLowerCase().endsWith(".xlsx");
   let imagesByRow = new Map();
-  let imagesQueue = [];
-  let queueIdx = 0;
 
   if (isXlsx) {
     try {
-      imagesByRow = await extractImagesXlsx(buffer);
+      imagesByRow = await extractRichValueImagesXlsx(buffer);
     } catch (e) {
       imagesByRow = new Map();
     }
 
-    // If we couldn't map images to rows (or exceljs was heavy), fall back to extracting all media files.
     if (!imagesByRow || imagesByRow.size === 0) {
       try {
-        imagesQueue = await extractImagesFromZip(buffer, imagesDir);
+        imagesByRow = await extractImagesExcelJs(buffer);
       } catch (e) {
-        imagesQueue = [];
+        imagesByRow = new Map();
+      }
+    }
+
+    if (!imagesByRow || imagesByRow.size === 0) {
+      try {
+        imagesByRow = await extractImagesXlsx(buffer);
+      } catch (e) {
+        imagesByRow = new Map();
       }
     }
   }
@@ -403,10 +706,11 @@ async function workbookToProducts({ buffer, filename, imagesDir }) {
 
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
 
-    let currentCategoryTitle = String(sheetName || "Каталог").trim();
+    let currentCategoryTitle = supplierMeta ? supplierMeta.title : String(sheetName || "Каталог").trim();
     let currentGroup = "";
     let headerMap = null;
     let rowMode = "normal";
+    const defaultGroup = supplierMeta && wb.SheetNames.length > 1 ? sn : "";
 
     for (let r = 0; r < rows.length; r++) {
       const row = rows[r];
@@ -417,7 +721,7 @@ async function workbookToProducts({ buffer, filename, imagesDir }) {
       // category/group title row (single cell)
       if (nonEmpty === 1) {
         const title = String(row.find((c) => String(c || "").trim()) || "").trim();
-        if (looksLikeCategoryTitle(title, currentCategoryTitle)) {
+        if (!supplierMeta && looksLikeCategoryTitle(title, currentCategoryTitle)) {
           currentCategoryTitle = title;
           currentGroup = "";
           headerMap = null;
@@ -459,66 +763,55 @@ async function workbookToProducts({ buffer, filename, imagesDir }) {
 
       const sku = headerMap.sku !== undefined ? String(row[headerMap.sku] || "").trim() : "";
       const description = headerMap.description !== undefined ? String(row[headerMap.description] || "").trim() : "";
+      const unit = headerMap.unit !== undefined ? String(row[headerMap.unit] || "").trim() : "";
+      const stockQty = headerMap.quantity !== undefined ? parseNumber(row[headerMap.quantity]) : undefined;
+      const excelRow = r + 1;
 
-      let image = headerMap.image !== undefined ? normalizeImageValue(row[headerMap.image]) : "";
+      const imageColumns = headerMap.imageColumns && headerMap.imageColumns.length
+        ? headerMap.imageColumns
+        : (headerMap.image !== undefined ? [headerMap.image] : []);
+      const usedImageKeys = new Set();
 
-      // Embedded images in .xlsx: map them by sheet + row (and optionally column),
-      // then save to uploads with a stable file name based on the product name (and sku).
-      if (!image) {
-        const excelRow = r + 1;
-        const rowKey = `${sheetName}|${excelRow}`;
-        let imgObj = null;
+      let images = uniqueNonEmpty(imageColumns.map((columnIndex) => normalizeImageValue(row[columnIndex])));
 
-        // In real files, images may be slightly shifted vertically (or anchored to a nearby row).
-        // We try the exact row first, then search the nearest rows within a small tolerance.
-        const rowCandidates = [excelRow, excelRow + 1, excelRow - 1, excelRow + 2, excelRow - 2].filter((x) => x > 0);
-
-        if (headerMap.image !== undefined) {
-          const col1 = headerMap.image + 1;
-          for (const rr of rowCandidates) {
-            const cellKey = `${sheetName}|${rr}|${col1}`;
-            if (imagesByRow.has(cellKey)) { imgObj = imagesByRow.get(cellKey); break; }
-          }
-        }
-
-        if (!imgObj) {
-          for (const rr of rowCandidates) {
-            const rk = `${sheetName}|${rr}`;
-            if (imagesByRow.has(rk)) { imgObj = imagesByRow.get(rk); break; }
-          }
-        }
-
-        if (imgObj && imgObj.buf) {
-          if (!imagesDir) {
-            image = "";
-          } else {
-            if (!fs.existsSync(imagesDir)) fs.mkdirSync(imagesDir, { recursive: true });
-
-            const base = sku ? `${sku}-${name}` : name;
-            const baseSlug = slugify(base || "image") || "image";
-            const ext = String(imgObj.ext || "png").toLowerCase();
-            const safeExt = ["png","jpg","jpeg","webp","gif","bmp"].includes(ext) ? ext : "png";
-
-            let fileName = baseSlug + "." + safeExt;
-            let outPath = path.join(imagesDir, fileName);
-            let idx = 2;
-            while (fs.existsSync(outPath)) {
-              fileName = `${baseSlug}-${idx}.${safeExt}`;
-              outPath = path.join(imagesDir, fileName);
-              idx++;
-            }
-
-            fs.writeFileSync(outPath, imgObj.buf);
-            image = "/uploads/products/" + fileName;
-          }
-        }
-
-        // Very last fallback (only if we couldn't map by row): assign next extracted media image in order.
-        if (!image && imagesQueue.length && queueIdx < imagesQueue.length) {
-          image = imagesQueue[queueIdx];
-          queueIdx++;
-        }
+      for (const columnIndex of imageColumns) {
+        const embedded = resolveEmbeddedImage({
+          imagesByRow,
+          sheetName,
+          excelRow,
+          columnIndex,
+          strictColumn: true,
+          sameRowOnly: true,
+          usedKeys: usedImageKeys
+        });
+        const saved = saveEmbeddedImage({
+          imageObj: embedded,
+          imagesDir,
+          baseName: `${sku || name}-${columnIndex + 1}`
+        });
+        if (saved) images.push(saved);
       }
+
+      if (images.length === 0 && imageColumns.length <= 1) {
+        const embedded = resolveEmbeddedImage({
+          imagesByRow,
+          sheetName,
+          excelRow,
+          columnIndex: headerMap.image,
+          strictColumn: false,
+          sameRowOnly: false,
+          usedKeys: usedImageKeys
+        });
+        const saved = saveEmbeddedImage({
+          imageObj: embedded,
+          imagesDir,
+          baseName: `${sku || name}`
+        });
+        if (saved) images.push(saved);
+      }
+
+      images = uniqueNonEmpty(images);
+      const image = images[0] || "";
 
       const thickness = headerMap.thickness !== undefined ? String(row[headerMap.thickness] || "").trim() : "";
       const size = headerMap.size !== undefined ? String(row[headerMap.size] || "").trim() : "";
@@ -576,25 +869,38 @@ async function workbookToProducts({ buffer, filename, imagesDir }) {
       const rowText = row.map((c) => String(c || "")).join(" ").toLowerCase();
       if (rowText.includes("по запросу")) prices.note = "Цена по запросу";
 
-      const category_id = slugify(currentCategoryTitle || sheetName);
-      const brandOrGroup = currentGroup || "";
-
-      const keyBase = sku ? `sku:${sku}` : `${category_id}|${slugify(brandOrGroup)}|${slugify(name)}|${slugify(thickness)}|${slugify(size)}`;
-      const key = slugify(keyBase);
+      const category_id = supplierMeta ? supplierMeta.id : slugify(currentCategoryTitle || sheetName);
+      const category_title = supplierMeta ? supplierMeta.title : currentCategoryTitle;
+      const supplier_id = supplierMeta ? supplierMeta.id : category_id;
+      const supplier_title = supplierMeta ? supplierMeta.title : category_title;
+      const brandOrGroup = currentGroup || defaultGroup || "";
+      const key = buildProductKey({
+        categoryId: category_id,
+        supplierId: supplier_id,
+        sku,
+        brandOrGroup,
+        name,
+        thickness,
+        size
+      });
 
       products.push({
         key,
         category_id,
-        category_title: currentCategoryTitle,
+        category_title,
+        supplier_id,
+        supplier_title,
         name,
         brandOrGroup,
-        unit: "шт",
+        unit: unit || "шт",
         sku,
         image,
+        images,
         description,
+        stockQty,
         prices,
         attrs,
-        inStock: true,
+        inStock: stockQty !== undefined ? stockQty > 0 : true,
         active: true
       });
     }

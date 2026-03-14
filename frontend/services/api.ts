@@ -57,9 +57,10 @@ export async function fetchAdminCatalog(token: string) {
   });
 }
 
-export async function adminImportExcel(token: string, file: File) {
+export async function adminImportExcel(token: string, file: File, supplier: string) {
   const fd = new FormData();
   fd.append('file', file);
+  fd.append('supplier', supplier);
 
   const res = await fetch('/api/admin/import/excel', {
     method: 'POST',
@@ -71,7 +72,7 @@ export async function adminImportExcel(token: string, file: File) {
     let msg = 'Ошибка импорта';
     try {
       const data = await res.json();
-      msg = data?.error || msg;
+      msg = data?.details || data?.error || msg;
     } catch {}
     throw new Error(msg);
   }
@@ -239,5 +240,13 @@ export async function adminDeleteLead(token: string, id: string) {
   return request<{ ok: boolean }>(`/api/admin/leads/${id}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function adminPurgeAll(token: string, purgePassword: string) {
+  return request<{ ok: boolean; deleted: { products: number; categories: number; orders: number; leads: number } }>(`/api/admin/purge-all`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ confirmText: 'DELETE_ALL', purgePassword }),
   });
 }

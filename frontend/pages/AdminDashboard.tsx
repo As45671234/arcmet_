@@ -1,7 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { Category } from '../types';
-import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage, adminPatchCategory } from '../services/api';
+import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage, adminPatchCategory, adminPurgeAll } from '../services/api';
+import { IMPORT_SUPPLIERS } from '../constants';
 
 interface AdminDashboardProps {
   categories: Category[];
@@ -12,6 +13,8 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout }) => {
   const [activeTab, setActiveTab] = useState<'inventory' | 'import' | 'orders' | 'leads' | 'categories'>('inventory');
   const [isImporting, setIsImporting] = useState(false);
+  const [isPurgingAll, setIsPurgingAll] = useState(false);
+  const [selectedImportSupplier, setSelectedImportSupplier] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [invPage, setInvPage] = useState(1);
   const INV_PAGE_SIZE = 30;
@@ -26,6 +29,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
     unit: 'шт',
     sku: '',
     image: '',
+    images: ['', '', ''],
     description: '',
     prices: {
       retail: '',
@@ -55,6 +59,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
     unit: 'шт',
     sku: '',
     image: '',
+    images: ['', '', ''],
     description: '',
     prices: {
       retail: '',
@@ -181,6 +186,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
     return Number.isFinite(n) ? n : undefined;
   };
 
+  const normalizeImageSlots = (images: any, fallbackImage = '') => {
+    const list = (Array.isArray(images) ? images : [])
+      .map((x) => String(x || '').trim())
+      .filter(Boolean);
+
+    const fallback = String(fallbackImage || '').trim();
+    if (fallback && !list.includes(fallback)) list.unshift(fallback);
+
+    return [...list.slice(0, 3), '', '', ''].slice(0, 3);
+  };
+
+  const filledImages = (images: any) =>
+    Array.from(
+      new Set(
+        (Array.isArray(images) ? images : [])
+          .map((x) => String(x || '').trim())
+          .filter(Boolean)
+      )
+    ).slice(0, 3);
+
   const refreshAdmin = async () => {
     const data = await fetchAdminCatalog(token);
     setAdminCategories(data.categories as any);
@@ -232,12 +257,18 @@ useEffect(() => {
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!selectedImportSupplier) {
+      alert('Сначала выберите поставщика для импорта.');
+      e.target.value = '';
+      return;
+    }
 
     setIsImporting(true);
     try {
-      const result = await adminImportExcel(token, file);
+      const result = await adminImportExcel(token, file, selectedImportSupplier);
       await refreshAll();
-      alert(`Импорт завершён: добавлено ${result.inserted}, обновлено ${result.updated}, пропущено ${result.skipped}`);
+      const durationSec = Number(result?.durationMs || 0) > 0 ? `, время ${Math.round(Number(result.durationMs) / 1000)} сек` : '';
+      alert(`Импорт ${result?.supplier?.title || ''} завершён: распознано ${result.totalParsed}, добавлено ${result.inserted}, обновлено ${result.updated}, пропущено ${result.skipped}${durationSec}`);
       setActiveTab('inventory');
     } catch (error: any) {
       console.error(error);
@@ -245,6 +276,37 @@ useEffect(() => {
     } finally {
       setIsImporting(false);
       e.target.value = '';
+    }
+  };
+
+  const handlePurgeAllData = async () => {
+    if (!token) return;
+    const firstConfirm = window.confirm('Это действие удалит ВСЕ товары, категории, заказы и заявки из базы. Продолжить?');
+    if (!firstConfirm) return;
+
+    const textConfirm = window.prompt('Для подтверждения введите: DELETE_ALL');
+    if (textConfirm !== 'DELETE_ALL') {
+      alert('Удаление отменено: неверная фраза подтверждения.');
+      return;
+    }
+
+    const purgePassword = window.prompt('Введите специальный пароль для полного удаления:');
+    if (!purgePassword) {
+      alert('Удаление отменено: пароль не введён.');
+      return;
+    }
+
+    setIsPurgingAll(true);
+    try {
+      const result = await adminPurgeAll(token, purgePassword);
+      await refreshAll();
+      const d = result?.deleted || { products: 0, categories: 0, orders: 0, leads: 0 };
+      alert(`База очищена: товары ${d.products}, категории ${d.categories}, заказы ${d.orders}, заявки ${d.leads}`);
+      setActiveTab('inventory');
+    } catch (error: any) {
+      alert(error?.message || 'Ошибка полного удаления базы');
+    } finally {
+      setIsPurgingAll(false);
     }
   };
 
@@ -266,6 +328,7 @@ useEffect(() => {
       unit: String(prod.unit || 'шт'),
       sku: String(prod.sku || ''),
       image: String(prod.image || ''),
+      images: normalizeImageSlots(prod.images, String(prod.image || '')),
       description: String(prod.description || ''),
       prices: {
         retail: prod?.prices?.retail !== undefined ? String(prod.prices.retail) : '',
@@ -324,12 +387,14 @@ useEffect(() => {
     });
 
     try {
+      const images = filledImages(editForm.images);
       await adminPatchProduct(token, editId, {
         name: editForm.name,
         brandOrGroup: editForm.brandOrGroup,
         unit: editForm.unit,
         sku: editForm.sku,
-        image: editForm.image,
+        image: images[0] || '',
+        images,
         description: editForm.description,
         inStock: editForm.inStock,
         prices,
@@ -360,6 +425,7 @@ useEffect(() => {
       unit: 'шт',
       sku: '',
       image: '',
+      images: ['', '', ''],
       description: '',
       prices: {
         retail: '',
@@ -391,12 +457,17 @@ useEffect(() => {
     return Number.isFinite(n) ? n : undefined;
   };
 
-  const uploadImageForAdd = async (file?: File | null) => {
+  const uploadImageForAdd = async (slotIndex: number, file?: File | null) => {
     if (!file || !token) return;
     setAddImageUploading(true);
     try {
       const res = await adminUploadProductImage(token, file);
-      setAddForm((prev) => ({ ...prev, image: res.imageUrl || '' }));
+      setAddForm((prev) => {
+        const images = normalizeImageSlots(prev.images, prev.image);
+        images[slotIndex] = String(res.imageUrl || '');
+        const first = filledImages(images)[0] || '';
+        return { ...prev, images, image: first };
+      });
     } catch (e: any) {
       alert(e?.message || 'Ошибка загрузки изображения');
     } finally {
@@ -404,12 +475,17 @@ useEffect(() => {
     }
   };
 
-  const uploadImageForEdit = async (file?: File | null) => {
+  const uploadImageForEdit = async (slotIndex: number, file?: File | null) => {
     if (!file || !token) return;
     setEditImageUploading(true);
     try {
       const res = await adminUploadProductImage(token, file);
-      setEditForm((prev) => ({ ...prev, image: res.imageUrl || '' }));
+      setEditForm((prev) => {
+        const images = normalizeImageSlots(prev.images, prev.image);
+        images[slotIndex] = String(res.imageUrl || '');
+        const first = filledImages(images)[0] || '';
+        return { ...prev, images, image: first };
+      });
     } catch (e: any) {
       alert(e?.message || 'Ошибка загрузки изображения');
     } finally {
@@ -463,12 +539,15 @@ useEffect(() => {
       brandOrGroup: addForm.brandOrGroup.trim(),
       unit: addForm.unit.trim() || 'шт',
       sku: addForm.sku.trim(),
-      image: addForm.image.trim(),
       description: addForm.description.trim(),
       inStock: !!addForm.inStock,
       prices: {},
       attrs: {},
     };
+
+    const images = filledImages(addForm.images);
+    payload.images = images;
+    payload.image = images[0] || '';
 
     const prices: any = {};
     const p = addForm.prices;
@@ -558,12 +637,22 @@ useEffect(() => {
           <h1 className="text-4xl font-black text-blue-900 uppercase tracking-tighter">Панель управления</h1>
           <p className="text-gray-500 font-medium">Управление каталогом и импорт данных</p>
         </div>
-        <button 
-          onClick={onLogout}
-          className="px-6 py-3 bg-red-50 text-red-500 font-bold rounded-xl hover:bg-red-500 hover:text-white transition-all text-sm uppercase tracking-widest"
-        >
-          Выйти
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handlePurgeAllData}
+            disabled={isPurgingAll}
+            className={`px-6 py-3 font-bold rounded-xl transition-all text-sm uppercase tracking-widest ${isPurgingAll ? 'bg-red-100 text-red-300 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`}
+            title="Полностью удалить данные из базы"
+          >
+            {isPurgingAll ? 'Очистка...' : 'Удалить все из БД'}
+          </button>
+          <button 
+            onClick={onLogout}
+            className="px-6 py-3 bg-red-50 text-red-500 font-bold rounded-xl hover:bg-red-500 hover:text-white transition-all text-sm uppercase tracking-widest"
+          >
+            Выйти
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-4 mb-8">
@@ -606,16 +695,38 @@ useEffect(() => {
               <i className="fas fa-file-excel"></i>
             </div>
             <h3 className="text-3xl font-black text-blue-900 mb-4 uppercase tracking-tighter">Загрузка каталога</h3>
-            <p className="text-gray-400 max-w-md mx-auto mb-10 font-medium">Выберите файл .xlsx или .xls. Система сохранит товары в MongoDB и обновит каталог.</p>
+            <p className="text-gray-400 max-w-2xl mx-auto mb-10 font-medium">Сначала выберите поставщика, затем загрузите Excel в шаблоне с колонками: Номенклатура, Ед. изм., Количество, Описание, Картинка 1-3, Артикул, Цена.</p>
+
+            <div className="max-w-4xl mx-auto mb-10 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 text-left">
+              {IMPORT_SUPPLIERS.map((supplier) => {
+                const isActive = selectedImportSupplier === supplier.id;
+                return (
+                  <button
+                    key={supplier.id}
+                    type="button"
+                    onClick={() => setSelectedImportSupplier(supplier.id)}
+                    className={`rounded-3xl border px-6 py-5 transition-all ${isActive ? 'border-blue-600 bg-blue-600 text-white shadow-xl shadow-blue-100' : 'border-gray-200 bg-gray-50 text-blue-900 hover:border-blue-300 hover:bg-blue-50'}`}
+                  >
+                    <div className="text-[11px] uppercase tracking-[0.3em] font-black opacity-70 mb-2">Поставщик</div>
+                    <div className="text-lg font-black tracking-tight">{supplier.title}</div>
+                  </button>
+                );
+              })}
+            </div>
 
             <label className={`inline-flex items-center gap-4 px-12 py-6 rounded-3xl font-black uppercase tracking-widest text-sm cursor-pointer transition-all ${isImporting ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-2xl shadow-blue-200 hover:-translate-y-1'}`}>
               {isImporting ? (
                 <><i className="fas fa-spinner fa-spin"></i> Обработка...</>
               ) : (
-                <><i className="fas fa-cloud-upload-alt text-xl"></i> Выбрать файл Excel</>
+                <><i className="fas fa-cloud-upload-alt text-xl"></i> {selectedImportSupplier ? 'Выбрать файл Excel' : 'Сначала выберите поставщика'}</>
               )}
-              <input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleExcelImport} disabled={isImporting} />
+              <input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleExcelImport} disabled={isImporting || !selectedImportSupplier} />
             </label>
+            {selectedImportSupplier ? (
+              <p className="mt-5 text-sm text-blue-700 font-semibold">
+                Импорт будет выполнен в категорию {IMPORT_SUPPLIERS.find((item) => item.id === selectedImportSupplier)?.title || selectedImportSupplier}.
+              </p>
+            ) : null}
           </div>
         ) : activeTab === 'orders' ? (
           <div className="p-10">
@@ -1372,29 +1483,53 @@ useEffect(() => {
                   </div>
                 </div>
 
-                <div>
-                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Изображение (URL)</div>
-                  <input
-                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
-                    value={addForm.image}
-                    onChange={(e) => setAddForm({ ...addForm, image: e.target.value })}
-                    placeholder="https://..."
-                  />
-                  <div className="mt-3">
-                    <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-bold uppercase tracking-widest ${addImageUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50 cursor-pointer'}`}>
-                      <i className={`fas ${addImageUploading ? 'fa-spinner fa-spin' : 'fa-upload'}`}></i>
-                      {addImageUploading ? 'Загрузка...' : 'Выбрать файл'}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        disabled={addImageUploading}
-                        onChange={(e) => {
-                          uploadImageForAdd(e.target.files?.[0]);
-                          e.currentTarget.value = '';
-                        }}
-                      />
-                    </label>
+                <div className="md:col-span-2">
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Изображения товара (до 3 шт.)</div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {[0, 1, 2].map((idx) => (
+                      <div key={`add-image-${idx}`} className="rounded-2xl border border-gray-200 p-3 bg-gray-50/60">
+                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Картинка {idx + 1}</div>
+                        <input
+                          className="w-full px-3 py-2 rounded-xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-xs"
+                          value={(addForm.images as string[])[idx] || ''}
+                          onChange={(e) => {
+                            const images = [...(addForm.images as string[])];
+                            images[idx] = e.target.value;
+                            const first = filledImages(images)[0] || '';
+                            setAddForm({ ...addForm, images, image: first });
+                          }}
+                          placeholder="/uploads/products/..."
+                        />
+                        <div className="mt-2 flex items-center gap-2">
+                          <label className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest ${addImageUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50 cursor-pointer'}`}>
+                            <i className={`fas ${addImageUploading ? 'fa-spinner fa-spin' : 'fa-upload'}`}></i>
+                            {addImageUploading ? '...' : 'Файл'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={addImageUploading}
+                              onChange={(e) => {
+                                uploadImageForAdd(idx, e.target.files?.[0]);
+                                e.currentTarget.value = '';
+                              }}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const images = [...(addForm.images as string[])];
+                              images[idx] = '';
+                              const first = filledImages(images)[0] || '';
+                              setAddForm({ ...addForm, images, image: first });
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-widest hover:bg-red-100"
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 <div className="flex items-end">
@@ -1556,28 +1691,52 @@ useEffect(() => {
                 </div>
 
                 <div className="md:col-span-2">
-                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Изображение (URL)</div>
-                  <input
-                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
-                    value={editForm.image}
-                    onChange={(e) => setEditForm({ ...editForm, image: e.target.value })}
-                    placeholder="https://..."
-                  />
-                  <div className="mt-3">
-                    <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-bold uppercase tracking-widest ${editImageUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50 cursor-pointer'}`}>
-                      <i className={`fas ${editImageUploading ? 'fa-spinner fa-spin' : 'fa-upload'}`}></i>
-                      {editImageUploading ? 'Загрузка...' : 'Выбрать файл'}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        disabled={editImageUploading}
-                        onChange={(e) => {
-                          uploadImageForEdit(e.target.files?.[0]);
-                          e.currentTarget.value = '';
-                        }}
-                      />
-                    </label>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Изображения товара (до 3 шт.)</div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {[0, 1, 2].map((idx) => (
+                      <div key={`edit-image-${idx}`} className="rounded-2xl border border-gray-200 p-3 bg-gray-50/60">
+                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Картинка {idx + 1}</div>
+                        <input
+                          className="w-full px-3 py-2 rounded-xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-xs"
+                          value={(editForm.images as string[])[idx] || ''}
+                          onChange={(e) => {
+                            const images = [...(editForm.images as string[])];
+                            images[idx] = e.target.value;
+                            const first = filledImages(images)[0] || '';
+                            setEditForm({ ...editForm, images, image: first });
+                          }}
+                          placeholder="/uploads/products/..."
+                        />
+                        <div className="mt-2 flex items-center gap-2">
+                          <label className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest ${editImageUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50 cursor-pointer'}`}>
+                            <i className={`fas ${editImageUploading ? 'fa-spinner fa-spin' : 'fa-upload'}`}></i>
+                            {editImageUploading ? '...' : 'Файл'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={editImageUploading}
+                              onChange={(e) => {
+                                uploadImageForEdit(idx, e.target.files?.[0]);
+                                e.currentTarget.value = '';
+                              }}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const images = [...(editForm.images as string[])];
+                              images[idx] = '';
+                              const first = filledImages(images)[0] || '';
+                              setEditForm({ ...editForm, images, image: first });
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-widest hover:bg-red-100"
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 

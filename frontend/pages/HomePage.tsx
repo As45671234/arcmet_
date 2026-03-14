@@ -140,6 +140,8 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
   const slidesCountRef = useRef(0);
   const lastSwitchTsRef = useRef(0);
   const lastWheelEventTsRef = useRef(0);
+  const touchStartXRef = useRef(0);
+  const touchDeltaXRef = useRef(0);
 
   const matchedSlides = categories
     .map((cat) => {
@@ -235,6 +237,8 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
 
   useEffect(() => {
     const onGlobalWheel = (event: WheelEvent) => {
+      if (window.innerWidth < 1024) return;
+
       const trackEl = catalogTrackRef.current;
       if (!trackEl) return;
       if (slidesCountRef.current < 2) return;
@@ -327,12 +331,75 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
       <section className="py-24 bg-gray-50 overflow-hidden" id="catalog">
         <div
           ref={catalogTrackRef}
-          className="container mx-auto px-6"
-          style={{ minHeight: 'calc(100vh + 2rem)' }}
+          className="container mx-auto px-4 md:px-6 lg:min-h-[calc(100vh+2rem)]"
         >
+          {/* ── Mobile layout ── */}
           <div
-            className="sticky top-24 h-[calc(100vh-7rem)] rounded-[2rem] overflow-hidden border border-gray-200 bg-white"
+            className="lg:hidden"
+            onTouchStart={(e) => { touchStartXRef.current = e.touches[0]?.clientX ?? 0; touchDeltaXRef.current = 0; }}
+            onTouchMove={(e) => { touchDeltaXRef.current = (e.touches[0]?.clientX ?? touchStartXRef.current) - touchStartXRef.current; }}
+            onTouchEnd={() => {
+              const d = touchDeltaXRef.current;
+              touchDeltaXRef.current = 0;
+              if (Math.abs(d) < 40) return;
+              if (d < 0) setActiveProductIndex((p) => Math.min(p + 1, productSlides.length - 1));
+              else setActiveProductIndex((p) => Math.max(p - 1, 0));
+            }}
           >
+            <div className="overflow-hidden rounded-[1.5rem] border border-gray-200 bg-white shadow-sm">
+              <div className="relative h-64 sm:h-80 bg-gray-100">
+                <img
+                  src={activeSlide.image}
+                  alt={activeSlide.title}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+              </div>
+              <div className="relative bg-gray-100 px-5 py-6 pr-12">
+                <h2 className="text-[10px] font-black tracking-[0.28em] uppercase text-gray-400 mb-3">
+                  Наша продукция
+                </h2>
+                <div className="text-5xl font-light text-gray-300">
+                  {String(safeActiveProductIndex + 1).padStart(2, '0')}
+                </div>
+                <h3 className="text-xl font-semibold text-gray-800 mt-4 uppercase tracking-wide leading-snug">
+                  {activeSlide.title}
+                </h3>
+                <p className="text-gray-500 text-sm leading-relaxed mt-3">
+                  {activeSlide.description}
+                </p>
+                <Link
+                  to={`/catalog?cat=${activeSlide.id}`}
+                  className="inline-flex items-center gap-2 mt-5 text-blue-600 font-bold text-sm"
+                >
+                  Перейти в каталог <i className="fas fa-arrow-right"></i>
+                </Link>
+              </div>
+            </div>
+            {productSlides.length > 1 ? (
+              <div className="mt-5 flex items-center justify-center gap-2.5">
+                {productSlides.map((slide, idx) => (
+                  <button
+                    key={slide.id}
+                    type="button"
+                    onClick={() => setActiveProductIndex(idx)}
+                    className="h-6 px-1.5 flex items-center justify-center"
+                    aria-label={`Показать слайд ${idx + 1}`}
+                  >
+                    <span
+                      className={[
+                        'block rounded-full transition-all',
+                        idx === safeActiveProductIndex ? 'h-1.5 w-7 bg-orange-500' : 'h-1.5 w-1.5 bg-gray-300',
+                      ].join(' ')}
+                    />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* ── Desktop sticky layout ── */}
+          <div className="hidden lg:block lg:sticky lg:top-24 lg:h-[calc(100vh-7rem)] rounded-[2rem] overflow-hidden border border-gray-200 bg-white">
             <div className="grid grid-cols-1 lg:grid-cols-2 h-full min-h-[560px]">
                 <div className="relative bg-gray-100 p-8 md:p-12 lg:p-16 pr-16 lg:pr-24 flex items-center">
                   <div className="max-w-xl">
@@ -340,7 +407,7 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
                       Наша продукция
                     </h2>
 
-                    <div className="text-7xl md:text-8xl font-light text-gray-400 mt-10">
+                    <div className="text-7xl md:text-8xl font-light text-gray-300 mt-10">
                       {String(safeActiveProductIndex + 1).padStart(2, '0')}
                     </div>
 

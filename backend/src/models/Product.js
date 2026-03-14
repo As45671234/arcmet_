@@ -7,6 +7,8 @@ const ProductSchema = new mongoose.Schema(
 
     category_id: { type: String, required: true, index: true },
     category_title: { type: String, required: true },
+    supplier_id: { type: String, default: "", index: true },
+    supplier_title: { type: String, default: "" },
 
     name: { type: String, required: true },
     brandOrGroup: { type: String, default: "" },
@@ -14,7 +16,9 @@ const ProductSchema = new mongoose.Schema(
     unit: { type: String, default: "шт" },
     sku: { type: String, default: "" },
     image: { type: String, default: "" },
+    images: { type: [String], default: [] },
     description: { type: String, default: "" },
+    stockQty: { type: Number },
 
     prices: {
       retail: { type: Number },

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Category, Product } from '../types';
 import noPhotoImage from '../components/img/no photo/no-photo.svg';
@@ -15,8 +15,12 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
   const [selectedSub, setSelectedSub] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedProductImageIndex, setSelectedProductImageIndex] = useState<number>(0);
+  const [cardImageIndexMap, setCardImageIndexMap] = useState<Record<string, number>>({});
   const [quantity, setQuantity] = useState<number>(1);
   const [isZoomed, setIsZoomed] = useState<boolean>(false);
+  const cardTouchStartRef = useRef<Record<string, { x: number; y: number }>>({});
+  const modalTouchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const cat = searchParams.get('cat');
@@ -45,6 +49,7 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
 
   const closeModal = () => {
     setSelectedProduct(null);
+    setSelectedProductImageIndex(0);
     setQuantity(1);
     setIsZoomed(false);
   };
@@ -74,9 +79,48 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
       )
       .filter((p) => !selectedSub || (p.brandOrGroup || '').trim() === selectedSub) || [];
 
+  const getProductImages = (product: Product) => {
+    const list = [
+      ...(Array.isArray(product.images) ? product.images : []),
+      product.image || '',
+    ]
+      .map((item) => String(item || '').trim())
+      .filter(Boolean);
+
+    return Array.from(new Set(list));
+  };
+
   const getProductImage = (product: Product) => {
-    const image = product.image?.trim();
-    return image ? image : noPhotoImage;
+    const images = getProductImages(product);
+    return images[0] || noPhotoImage;
+  };
+
+  const getCardImage = (product: Product) => {
+    const images = getProductImages(product);
+    if (!images.length) return noPhotoImage;
+    const idx = Math.max(0, Math.min(cardImageIndexMap[product.id] ?? 0, images.length - 1));
+    return images[idx] || images[0] || noPhotoImage;
+  };
+
+  const SWIPE_THRESHOLD = 36;
+
+  const switchCardImage = (product: Product, direction: 1 | -1) => {
+    const images = getProductImages(product);
+    if (images.length <= 1) return;
+
+    setCardImageIndexMap((prev) => {
+      const current = prev[product.id] ?? 0;
+      const next = (current + direction + images.length) % images.length;
+      return { ...prev, [product.id]: next };
+    });
+  };
+
+  const switchModalImage = (direction: 1 | -1) => {
+    if (!selectedProduct) return;
+    const images = getProductImages(selectedProduct);
+    if (images.length <= 1) return;
+    setSelectedProductImageIndex((prev) => (prev + direction + images.length) % images.length);
+    setIsZoomed(false);
   };
 
   const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
@@ -200,15 +244,55 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                 <div
                   key={product.id}
                   className="bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-2xl transition-all overflow-hidden group cursor-pointer"
-                  onClick={() => setSelectedProduct(product)}
+                  onClick={() => {
+                    setSelectedProduct(product);
+                    setSelectedProductImageIndex(0);
+                    setIsZoomed(false);
+                  }}
                 >
                   <div className="h-56 bg-gray-100 relative flex items-center justify-center overflow-hidden">
                     <img
-                      src={getProductImage(product)}
+                      src={getCardImage(product)}
                       alt={product.name}
                       onError={handleImageError}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                      loading="lazy"
+                      decoding="async"
+                      onTouchStart={(event) => {
+                        const t = event.touches[0];
+                        cardTouchStartRef.current[product.id] = { x: t.clientX, y: t.clientY };
+                      }}
+                      onTouchEnd={(event) => {
+                        const start = cardTouchStartRef.current[product.id];
+                        if (!start) return;
+                        const t = event.changedTouches[0];
+                        const dx = t.clientX - start.x;
+                        const dy = t.clientY - start.y;
+                        if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) <= Math.abs(dy)) return;
+                        event.stopPropagation();
+                        switchCardImage(product, dx < 0 ? 1 : -1);
+                      }}
                     />
+                    {getProductImages(product).length > 1 ? (
+                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-white/75 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                        {getProductImages(product).map((_, idx) => {
+                          const activeIdx = cardImageIndexMap[product.id] ?? 0;
+                          const isActive = activeIdx === idx;
+                          return (
+                            <button
+                              key={`${product.id}-dot-${idx}`}
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setCardImageIndexMap((prev) => ({ ...prev, [product.id]: idx }));
+                              }}
+                              className={`w-2.5 h-2.5 rounded-full border transition-all ${isActive ? 'bg-blue-600 border-blue-600 scale-110' : 'bg-white border-blue-300 hover:bg-blue-100'}`}
+                              aria-label={`Фото ${idx + 1}`}
+                            />
+                          );
+                        })}
+                      </div>
+                    ) : null}
                     {product.brandOrGroup &&
                     product.brandOrGroup.trim() &&
                     product.brandOrGroup.length <= 40 &&
@@ -284,14 +368,76 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
               <div className="bg-white lg:sticky lg:top-0 lg:h-screen lg:max-h-screen overflow-auto">
                 <div className="relative group h-72 sm:h-80 lg:h-full bg-gray-100 flex items-center justify-center overflow-hidden">
                   <img
-                    src={getProductImage(selectedProduct)}
+                    src={getProductImages(selectedProduct)[selectedProductImageIndex] || getProductImage(selectedProduct)}
                     alt={selectedProduct.name}
                     onError={handleImageError}
-                    className={`w-full h-full object-cover transition-transform duration-500 ${
+                    className={`max-w-full max-h-full object-contain transition-transform duration-500 ${
                       isZoomed ? 'scale-150 cursor-zoom-out' : 'cursor-zoom-in group-hover:scale-110'
                     }`}
                     onClick={() => setIsZoomed(!isZoomed)}
+                    decoding="async"
+                    onTouchStart={(event) => {
+                      const t = event.touches[0];
+                      modalTouchStartRef.current = { x: t.clientX, y: t.clientY };
+                    }}
+                    onTouchEnd={(event) => {
+                      const start = modalTouchStartRef.current;
+                      if (!start) return;
+                      const t = event.changedTouches[0];
+                      const dx = t.clientX - start.x;
+                      const dy = t.clientY - start.y;
+                      if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) <= Math.abs(dy)) return;
+                      event.stopPropagation();
+                      switchModalImage(dx < 0 ? 1 : -1);
+                    }}
                   />
+
+                  {getProductImages(selectedProduct).length > 1 ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          switchModalImage(-1);
+                        }}
+                        className="hidden lg:flex absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/85 border border-gray-200 text-blue-900 items-center justify-center shadow-md hover:bg-white"
+                        aria-label="Предыдущее фото"
+                      >
+                        <i className="fas fa-chevron-left"></i>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          switchModalImage(1);
+                        }}
+                        className="hidden lg:flex absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/85 border border-gray-200 text-blue-900 items-center justify-center shadow-md hover:bg-white"
+                        aria-label="Следующее фото"
+                      >
+                        <i className="fas fa-chevron-right"></i>
+                      </button>
+                    </>
+                  ) : null}
+
+                  {getProductImages(selectedProduct).length > 1 ? (
+                    <div className="absolute left-4 bottom-4 right-4 flex gap-2 overflow-x-auto py-1">
+                      {getProductImages(selectedProduct).map((img, idx) => (
+                        <button
+                          key={`${img}-${idx}`}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedProductImageIndex(idx);
+                            setIsZoomed(false);
+                          }}
+                          className={`w-14 h-14 rounded-xl overflow-hidden border-2 flex-shrink-0 bg-white/90 ${idx === selectedProductImageIndex ? 'border-blue-500' : 'border-white/70'}`}
+                          aria-label={`Фото ${idx + 1}`}
+                        >
+                          <img src={img} alt={`Фото ${idx + 1}`} className="w-full h-full object-contain" onError={handleImageError} decoding="async" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
 
                   {/* Zoom Indicator */}
                   <div className="absolute bottom-4 right-4 bg-black/70 text-white text-xs px-3 py-1.5 rounded-xl font-semibold">

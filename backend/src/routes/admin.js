@@ -12,7 +12,7 @@ const Order = require("../models/Order");
 const Lead = require("../models/Lead");
 const { requireAdmin } = require("../middleware/auth");
 const { workbookToProducts } = require("../services/excelImport");
-const { slugify } = require("../utils");
+const { slugify, getImportSupplier, buildProductKey } = require("../utils");
 
 const router = express.Router();
 
@@ -68,6 +68,37 @@ router.post("/login", (req, res) => {
   res.json({ token });
 });
 
+router.post("/purge-all", requireAdmin, async (req, res) => {
+  const confirmText = String(req.body?.confirmText || "").trim();
+  const purgePassword = String(req.body?.purgePassword || "").trim();
+
+  if (confirmText !== "DELETE_ALL") {
+    return res.status(400).json({ error: "invalid confirmation text" });
+  }
+
+  const expected = process.env.ADMIN_PURGE_PASSWORD || "ArcmetPurge!2026#FullReset";
+  if (!purgePassword || purgePassword !== expected) {
+    return res.status(403).json({ error: "invalid purge password" });
+  }
+
+  const [products, categories, orders, leads] = await Promise.all([
+    Product.deleteMany({}),
+    CategoryMeta.deleteMany({}),
+    Order.deleteMany({}),
+    Lead.deleteMany({})
+  ]);
+
+  return res.json({
+    ok: true,
+    deleted: {
+      products: Number(products?.deletedCount || 0),
+      categories: Number(categories?.deletedCount || 0),
+      orders: Number(orders?.deletedCount || 0),
+      leads: Number(leads?.deletedCount || 0)
+    }
+  });
+});
+
 router.get("/catalog", requireAdmin, async (req, res) => {
   const products = await Product.find({ active: true }).sort({ category_title: 1, name: 1 }).lean();
   const categoriesMap = new Map();
@@ -80,11 +111,15 @@ router.get("/catalog", requireAdmin, async (req, res) => {
     categoriesMap.get(catId).items.push({
       id: String(p._id),
       name: p.name,
+      supplier_id: p.supplier_id || "",
+      supplier_title: p.supplier_title || "",
       brandOrGroup: p.brandOrGroup || "",
       unit: p.unit || "шт",
       sku: p.sku || "",
       image: p.image || "",
+      images: Array.isArray(p.images) ? p.images : [],
       description: p.description || "",
+      stockQty: p.stockQty,
       prices: p.prices || {},
       attrs: p.attrs || {},
       category_id: p.category_id,
@@ -163,44 +198,130 @@ router.patch("/categories/:id", requireAdmin, async (req, res) => {
 
 router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res) => {
   try {
+    const t0 = Date.now();
     const file = req.file;
     if (!file) return res.status(400).json({ error: "file is required" });
+    const supplier = String(req.body?.supplier || "").trim();
+    const supplierMeta = getImportSupplier(supplier);
+    if (!supplierMeta) {
+      return res.status(400).json({ error: "supplier is required" });
+    }
 
     const items = await workbookToProducts({
       buffer: file.buffer,
       filename: file.originalname || "",
-      imagesDir: require("path").join(__dirname, "..", "..", "uploads", "products")
+      imagesDir: require("path").join(__dirname, "..", "..", "uploads", "products"),
+      supplier: supplierMeta.id
     });
 
-  let inserted = 0;
-  let updated = 0;
-  let skipped = 0;
+    if (!items.length) {
+      return res.status(400).json({
+        error: "excel template was not recognized",
+        details: "Не удалось распознать строки товаров. Проверьте заголовки Excel и перезапустите backend после обновления кода."
+      });
+    }
 
-  for (const it of items) {
-    if (!it.name || !it.category_id) { skipped++; continue; }
+    let inserted = 0;
+    let updated = 0;
+    let skipped = 0;
 
-    const existing = await Product.findOne({ key: it.key });
-    if (!existing) {
-      await Product.create(it);
-      inserted++;
-    } else {
-      // Update prices/attrs/description but keep manual edits if present? We'll overwrite basic fields.
-      existing.category_id = it.category_id;
-      existing.category_title = it.category_title;
-      existing.name = it.name;
-      existing.brandOrGroup = it.brandOrGroup;
-      existing.sku = it.sku || existing.sku;
-      if (it.image) existing.image = it.image;
-      existing.description = it.description || existing.description;
-      existing.attrs = it.attrs || existing.attrs;
+    const validItems = items.filter((it) => {
+      const ok = !!(it && it.name && it.category_id && it.key);
+      if (!ok) skipped++;
+      return ok;
+    });
 
-      existing.prices = { ...(existing.prices || {}), ...(it.prices || {}) };
-      await existing.save();
+    const keys = Array.from(new Set(validItems.map((it) => String(it.key)).filter(Boolean)));
+    const skus = Array.from(new Set(validItems.map((it) => String(it.sku || "").trim()).filter(Boolean)));
+    const names = Array.from(new Set(validItems.filter((it) => !String(it.sku || "").trim()).map((it) => String(it.name || "").trim()).filter(Boolean)));
+
+    const orQueries = [];
+    if (keys.length) orQueries.push({ key: { $in: keys } });
+    if (skus.length) orQueries.push({ category_id: supplierMeta.id, sku: { $in: skus } });
+    if (names.length) orQueries.push({ category_id: supplierMeta.id, name: { $in: names } });
+
+    const existingDocs = orQueries.length
+      ? await Product.find({ $or: orQueries }).lean()
+      : [];
+
+    const byKey = new Map();
+    const bySku = new Map();
+    const byNameGroup = new Map();
+
+    for (const doc of existingDocs) {
+      if (doc && doc.key) byKey.set(String(doc.key), doc);
+      if (doc && doc.category_id && doc.sku) bySku.set(`${doc.category_id}|${String(doc.sku).trim()}`, doc);
+      if (doc && doc.category_id && doc.name) {
+        const ng = `${doc.category_id}|${String(doc.name).trim()}|${String(doc.brandOrGroup || "").trim()}`;
+        byNameGroup.set(ng, doc);
+      }
+    }
+
+    const operations = [];
+
+    for (const it of validItems) {
+      const skuKey = it.sku ? `${it.category_id}|${String(it.sku).trim()}` : "";
+      const nameGroupKey = `${it.category_id}|${String(it.name).trim()}|${String(it.brandOrGroup || "").trim()}`;
+
+      const existing =
+        byKey.get(String(it.key)) ||
+        (skuKey ? bySku.get(skuKey) : null) ||
+        byNameGroup.get(nameGroupKey) ||
+        null;
+
+      if (!existing || !existing._id) {
+        operations.push({ insertOne: { document: it } });
+        inserted++;
+        continue;
+      }
+
+      const mergedPrices = { ...(existing.prices || {}), ...(it.prices || {}) };
+      const mergedAttrs = it.attrs || existing.attrs || {};
+
+      const setPayload = {
+        category_id: it.category_id,
+        category_title: it.category_title,
+        supplier_id: it.supplier_id || existing.supplier_id || "",
+        supplier_title: it.supplier_title || existing.supplier_title || "",
+        key: it.key || existing.key,
+        name: it.name,
+        brandOrGroup: it.brandOrGroup,
+        unit: it.unit || existing.unit || "шт",
+        sku: it.sku || existing.sku || "",
+        description: it.description || existing.description || "",
+        attrs: mergedAttrs,
+        prices: mergedPrices
+      };
+
+      if (it.image) setPayload.image = it.image;
+      if (Array.isArray(it.images) && it.images.length) setPayload.images = it.images;
+      if (it.stockQty !== undefined) {
+        setPayload.stockQty = it.stockQty;
+        setPayload.inStock = it.stockQty > 0;
+      }
+
+      operations.push({
+        updateOne: {
+          filter: { _id: existing._id },
+          update: { $set: setPayload }
+        }
+      });
       updated++;
     }
-  }
 
-    res.json({ ok: true, inserted, updated, skipped, totalParsed: items.length });
+    if (operations.length) {
+      await Product.bulkWrite(operations, { ordered: false });
+    }
+
+    res.json({
+      ok: true,
+      inserted,
+      updated,
+      skipped,
+      totalParsed: items.length,
+      supplier: supplierMeta,
+      durationMs: Date.now() - t0
+    });
   } catch (e) {
     res.status(500).json({ error: "import failed", details: String(e && e.message ? e.message : e) });
   }
@@ -230,19 +351,30 @@ router.post("/products", requireAdmin, async (req, res) => {
 
   const category_id = slugify(category_title);
   const sku = String(body.sku || "").trim();
-  const keyBase = sku ? `sku:${sku}` : `${category_id}|${slugify(body.brandOrGroup || "")}|${slugify(name)}|${slugify(body.attrs?.thickness_mm || "")}|${slugify(body.attrs?.roll_size_mm || "")}`;
-  const key = slugify(keyBase);
+  const key = buildProductKey({
+    categoryId: category_id,
+    supplierId: body.supplier_id || category_id,
+    sku,
+    brandOrGroup: body.brandOrGroup || "",
+    name,
+    thickness: body.attrs?.thickness_mm || "",
+    size: body.attrs?.roll_size_mm || ""
+  });
 
   const created = await Product.create({
     key,
     category_id,
     category_title,
+    supplier_id: String(body.supplier_id || category_id),
+    supplier_title: String(body.supplier_title || category_title),
     name,
     brandOrGroup: String(body.brandOrGroup || ""),
     unit: String(body.unit || "шт"),
     sku,
     image: String(body.image || ""),
+    images: Array.isArray(body.images) ? body.images.map((x) => String(x || "").trim()).filter(Boolean) : [],
     description: String(body.description || ""),
+    stockQty: body.stockQty !== undefined ? Number(body.stockQty) : undefined,
     prices: body.prices || {},
     attrs: body.attrs || {},
     inStock: body.inStock !== undefined ? !!body.inStock : true,
@@ -267,7 +399,15 @@ router.patch("/products/:id", requireAdmin, async (req, res) => {
   if (patch.unit !== undefined) p.unit = String(patch.unit);
   if (patch.sku !== undefined) p.sku = String(patch.sku);
   if (patch.image !== undefined) p.image = String(patch.image);
+  if (patch.images !== undefined && Array.isArray(patch.images)) p.images = patch.images.map((x) => String(x || "").trim()).filter(Boolean);
   if (patch.description !== undefined) p.description = String(patch.description);
+  if (patch.stockQty !== undefined) p.stockQty = Number(patch.stockQty);
+  if (patch.supplier_id !== undefined) p.supplier_id = String(patch.supplier_id);
+  if (patch.supplier_title !== undefined) p.supplier_title = String(patch.supplier_title);
+
+  if (patch.stockQty !== undefined && patch.inStock === undefined) {
+    p.inStock = Number(patch.stockQty) > 0;
+  }
 
   if (patch.prices && typeof patch.prices === "object") {
     p.prices = { ...(p.prices || {}), ...patch.prices };

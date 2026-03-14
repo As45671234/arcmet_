@@ -26,11 +26,15 @@ export interface ProductAttrs {
 export interface Product {
   id: string;
   name: string;
+  supplier_id?: string;
+  supplier_title?: string;
   brandOrGroup: string;
   unit: string;
   sku?: string;
   image?: string;
+  images?: string[];
   description?: string;
+  stockQty?: number;
   prices: ProductPrice;
   attrs: ProductAttrs;
   category_id: string;

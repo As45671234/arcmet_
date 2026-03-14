@@ -1,5 +1,14 @@
 export const CONTACT_EMAIL = "ceo@arcmet.kz";
 
+export const IMPORT_SUPPLIERS = [
+  { id: 'plastfoil', title: 'PLASTFOIL' },
+  { id: 'panelsan', title: 'PANELSAN' },
+  { id: 'fachmann', title: 'FACHMANN' },
+  { id: 'rheinzink', title: 'RHEINZINK' },
+  { id: 'penoplex', title: 'ПЕНОПЛЭКС' },
+  { id: 'akfa', title: 'AKFA BUILD' },
+] as const;
+
 // Brand logos shown on the Home page (instead of generic icons)
 // Files live in: /aa/public/logos/
 export const BRAND_LOGOS: Record<string, { label: string; src: string }> = {
