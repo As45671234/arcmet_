@@ -23,6 +23,8 @@ const upload = multer({
 });
 const productImagesDir = path.join(__dirname, "..", "..", "uploads", "products");
 fs.mkdirSync(productImagesDir, { recursive: true });
+const importChunksDir = path.join(__dirname, "..", "..", "uploads", "import-chunks");
+fs.mkdirSync(importChunksDir, { recursive: true });
 
 const imageUpload = multer({
   storage: multer.diskStorage({
@@ -49,6 +51,120 @@ function uploadSingle(field) {
       return res.status(400).json({ error: "upload failed", details: String(err && err.message ? err.message : err) });
     });
   };
+}
+
+function makeUploadId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getChunkDir(uploadIdRaw) {
+  const uploadId = String(uploadIdRaw || "").trim();
+  if (!/^[a-zA-Z0-9_-]{6,80}$/.test(uploadId)) return "";
+  return path.join(importChunksDir, uploadId);
+}
+
+function cleanupDirSafe(dirPath) {
+  try {
+    if (dirPath && fs.existsSync(dirPath)) fs.rmSync(dirPath, { recursive: true, force: true });
+  } catch (e) {
+    // ignore cleanup failures
+  }
+}
+
+async function upsertImportedProducts(items, supplierMeta) {
+  let inserted = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  const validItems = items.filter((it) => {
+    const ok = !!(it && it.name && it.category_id && it.key);
+    if (!ok) skipped++;
+    return ok;
+  });
+
+  const keys = Array.from(new Set(validItems.map((it) => String(it.key)).filter(Boolean)));
+  const skus = Array.from(new Set(validItems.map((it) => String(it.sku || "").trim()).filter(Boolean)));
+  const names = Array.from(new Set(validItems.filter((it) => !String(it.sku || "").trim()).map((it) => String(it.name || "").trim()).filter(Boolean)));
+
+  const orQueries = [];
+  if (keys.length) orQueries.push({ key: { $in: keys } });
+  if (skus.length) orQueries.push({ category_id: supplierMeta.id, sku: { $in: skus } });
+  if (names.length) orQueries.push({ category_id: supplierMeta.id, name: { $in: names } });
+
+  const existingDocs = orQueries.length
+    ? await Product.find({ $or: orQueries }).lean()
+    : [];
+
+  const byKey = new Map();
+  const bySku = new Map();
+  const byNameGroup = new Map();
+
+  for (const doc of existingDocs) {
+    if (doc && doc.key) byKey.set(String(doc.key), doc);
+    if (doc && doc.category_id && doc.sku) bySku.set(`${doc.category_id}|${String(doc.sku).trim()}`, doc);
+    if (doc && doc.category_id && doc.name) {
+      const ng = `${doc.category_id}|${String(doc.name).trim()}|${String(doc.brandOrGroup || "").trim()}`;
+      byNameGroup.set(ng, doc);
+    }
+  }
+
+  const operations = [];
+
+  for (const it of validItems) {
+    const skuKey = it.sku ? `${it.category_id}|${String(it.sku).trim()}` : "";
+    const nameGroupKey = `${it.category_id}|${String(it.name).trim()}|${String(it.brandOrGroup || "").trim()}`;
+
+    const existing =
+      byKey.get(String(it.key)) ||
+      (skuKey ? bySku.get(skuKey) : null) ||
+      byNameGroup.get(nameGroupKey) ||
+      null;
+
+    if (!existing || !existing._id) {
+      operations.push({ insertOne: { document: it } });
+      inserted++;
+      continue;
+    }
+
+    const mergedPrices = { ...(existing.prices || {}), ...(it.prices || {}) };
+    const mergedAttrs = it.attrs || existing.attrs || {};
+
+    const setPayload = {
+      category_id: it.category_id,
+      category_title: it.category_title,
+      supplier_id: it.supplier_id || existing.supplier_id || "",
+      supplier_title: it.supplier_title || existing.supplier_title || "",
+      key: it.key || existing.key,
+      name: it.name,
+      brandOrGroup: it.brandOrGroup,
+      unit: it.unit || existing.unit || "шт",
+      sku: it.sku || existing.sku || "",
+      description: it.description || existing.description || "",
+      attrs: mergedAttrs,
+      prices: mergedPrices
+    };
+
+    if (it.image) setPayload.image = it.image;
+    if (Array.isArray(it.images) && it.images.length) setPayload.images = it.images;
+    if (it.stockQty !== undefined) {
+      setPayload.stockQty = it.stockQty;
+      setPayload.inStock = it.stockQty > 0;
+    }
+
+    operations.push({
+      updateOne: {
+        filter: { _id: existing._id },
+        update: { $set: setPayload }
+      }
+    });
+    updated++;
+  }
+
+  if (operations.length) {
+    await Product.bulkWrite(operations, { ordered: false });
+  }
+
+  return { inserted, updated, skipped };
 }
 
 
@@ -221,97 +337,7 @@ router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res
       });
     }
 
-    let inserted = 0;
-    let updated = 0;
-    let skipped = 0;
-
-    const validItems = items.filter((it) => {
-      const ok = !!(it && it.name && it.category_id && it.key);
-      if (!ok) skipped++;
-      return ok;
-    });
-
-    const keys = Array.from(new Set(validItems.map((it) => String(it.key)).filter(Boolean)));
-    const skus = Array.from(new Set(validItems.map((it) => String(it.sku || "").trim()).filter(Boolean)));
-    const names = Array.from(new Set(validItems.filter((it) => !String(it.sku || "").trim()).map((it) => String(it.name || "").trim()).filter(Boolean)));
-
-    const orQueries = [];
-    if (keys.length) orQueries.push({ key: { $in: keys } });
-    if (skus.length) orQueries.push({ category_id: supplierMeta.id, sku: { $in: skus } });
-    if (names.length) orQueries.push({ category_id: supplierMeta.id, name: { $in: names } });
-
-    const existingDocs = orQueries.length
-      ? await Product.find({ $or: orQueries }).lean()
-      : [];
-
-    const byKey = new Map();
-    const bySku = new Map();
-    const byNameGroup = new Map();
-
-    for (const doc of existingDocs) {
-      if (doc && doc.key) byKey.set(String(doc.key), doc);
-      if (doc && doc.category_id && doc.sku) bySku.set(`${doc.category_id}|${String(doc.sku).trim()}`, doc);
-      if (doc && doc.category_id && doc.name) {
-        const ng = `${doc.category_id}|${String(doc.name).trim()}|${String(doc.brandOrGroup || "").trim()}`;
-        byNameGroup.set(ng, doc);
-      }
-    }
-
-    const operations = [];
-
-    for (const it of validItems) {
-      const skuKey = it.sku ? `${it.category_id}|${String(it.sku).trim()}` : "";
-      const nameGroupKey = `${it.category_id}|${String(it.name).trim()}|${String(it.brandOrGroup || "").trim()}`;
-
-      const existing =
-        byKey.get(String(it.key)) ||
-        (skuKey ? bySku.get(skuKey) : null) ||
-        byNameGroup.get(nameGroupKey) ||
-        null;
-
-      if (!existing || !existing._id) {
-        operations.push({ insertOne: { document: it } });
-        inserted++;
-        continue;
-      }
-
-      const mergedPrices = { ...(existing.prices || {}), ...(it.prices || {}) };
-      const mergedAttrs = it.attrs || existing.attrs || {};
-
-      const setPayload = {
-        category_id: it.category_id,
-        category_title: it.category_title,
-        supplier_id: it.supplier_id || existing.supplier_id || "",
-        supplier_title: it.supplier_title || existing.supplier_title || "",
-        key: it.key || existing.key,
-        name: it.name,
-        brandOrGroup: it.brandOrGroup,
-        unit: it.unit || existing.unit || "шт",
-        sku: it.sku || existing.sku || "",
-        description: it.description || existing.description || "",
-        attrs: mergedAttrs,
-        prices: mergedPrices
-      };
-
-      if (it.image) setPayload.image = it.image;
-      if (Array.isArray(it.images) && it.images.length) setPayload.images = it.images;
-      if (it.stockQty !== undefined) {
-        setPayload.stockQty = it.stockQty;
-        setPayload.inStock = it.stockQty > 0;
-      }
-
-      operations.push({
-        updateOne: {
-          filter: { _id: existing._id },
-          update: { $set: setPayload }
-        }
-      });
-      updated++;
-    }
-
-    if (operations.length) {
-      await Product.bulkWrite(operations, { ordered: false });
-    }
+    const { inserted, updated, skipped } = await upsertImportedProducts(items, supplierMeta);
 
     res.json({
       ok: true,
@@ -324,6 +350,93 @@ router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res
     });
   } catch (e) {
     res.status(500).json({ error: "import failed", details: String(e && e.message ? e.message : e) });
+  }
+});
+
+router.post("/import/excel/chunk/init", requireAdmin, async (req, res) => {
+  const uploadId = makeUploadId();
+  const dir = getChunkDir(uploadId);
+  if (!dir) return res.status(400).json({ error: "invalid upload id" });
+
+  fs.mkdirSync(dir, { recursive: true });
+  res.json({ ok: true, uploadId });
+});
+
+router.post("/import/excel/chunk/:uploadId", requireAdmin, uploadSingle("chunk"), async (req, res) => {
+  const dir = getChunkDir(req.params.uploadId);
+  if (!dir) return res.status(400).json({ error: "invalid upload id" });
+  if (!fs.existsSync(dir)) return res.status(404).json({ error: "upload session not found" });
+
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: "chunk is required" });
+
+  const idxRaw = String(req.body?.index || "").trim();
+  const idx = Number(idxRaw);
+  if (!Number.isInteger(idx) || idx < 0 || idx > 10000) {
+    return res.status(400).json({ error: "invalid chunk index" });
+  }
+
+  const partPath = path.join(dir, `${idx}.part`);
+  fs.writeFileSync(partPath, file.buffer);
+  res.json({ ok: true, index: idx, size: file.size || file.buffer?.length || 0 });
+});
+
+router.post("/import/excel/chunk/:uploadId/complete", requireAdmin, async (req, res) => {
+  const t0 = Date.now();
+  const dir = getChunkDir(req.params.uploadId);
+  if (!dir) return res.status(400).json({ error: "invalid upload id" });
+  if (!fs.existsSync(dir)) return res.status(404).json({ error: "upload session not found" });
+
+  try {
+    const supplier = String(req.body?.supplier || "").trim();
+    const supplierMeta = getImportSupplier(supplier);
+    if (!supplierMeta) {
+      return res.status(400).json({ error: "supplier is required" });
+    }
+
+    const filename = String(req.body?.filename || "import.xlsx");
+    const parts = fs.readdirSync(dir)
+      .filter((name) => /^\d+\.part$/.test(name))
+      .map((name) => ({ name, idx: Number(name.replace(/\.part$/, "")) }))
+      .sort((a, b) => a.idx - b.idx);
+
+    if (!parts.length) {
+      return res.status(400).json({ error: "no chunks uploaded" });
+    }
+
+    const buffers = parts.map((p) => fs.readFileSync(path.join(dir, p.name)));
+    const merged = Buffer.concat(buffers);
+
+    const items = await workbookToProducts({
+      buffer: merged,
+      filename,
+      imagesDir: require("path").join(__dirname, "..", "..", "uploads", "products"),
+      supplier: supplierMeta.id
+    });
+
+    if (!items.length) {
+      return res.status(400).json({
+        error: "excel template was not recognized",
+        details: "Не удалось распознать строки товаров. Проверьте заголовки Excel и перезапустите backend после обновления кода."
+      });
+    }
+
+    const { inserted, updated, skipped } = await upsertImportedProducts(items, supplierMeta);
+
+    res.json({
+      ok: true,
+      inserted,
+      updated,
+      skipped,
+      totalParsed: items.length,
+      supplier: supplierMeta,
+      durationMs: Date.now() - t0,
+      chunked: true
+    });
+  } catch (e) {
+    res.status(500).json({ error: "import failed", details: String(e && e.message ? e.message : e) });
+  } finally {
+    cleanupDirSafe(dir);
   }
 });
 

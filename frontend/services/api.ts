@@ -58,26 +58,73 @@ export async function fetchAdminCatalog(token: string) {
 }
 
 export async function adminImportExcel(token: string, file: File, supplier: string) {
-  const fd = new FormData();
-  fd.append('file', file);
-  fd.append('supplier', supplier);
+  const CHUNK_SIZE = 512 * 1024;
 
-  const res = await fetch('/api/admin/import/excel', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: fd,
-  });
-
-  if (!res.ok) {
+  const parseImportError = async (res: Response) => {
     let msg = 'Ошибка импорта';
     try {
       const data = await res.json();
       msg = data?.details || data?.error || msg;
-    } catch {}
-    throw new Error(msg);
+    } catch {
+      try {
+        const raw = await res.text();
+        const compact = String(raw || '').replace(/\s+/g, ' ').trim();
+        const hint = compact ? `: ${compact.slice(0, 180)}` : '';
+        msg = `Ошибка импорта (HTTP ${res.status})${hint}`;
+      } catch {
+        msg = `Ошибка импорта (HTTP ${res.status})`;
+      }
+    }
+    return msg;
+  };
+
+  const initRes = await fetch('/api/admin/import/excel/chunk/init', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!initRes.ok) {
+    throw new Error(await parseImportError(initRes));
   }
 
-  return res.json();
+  const initData = await initRes.json() as { ok: boolean; uploadId: string };
+  const uploadId = String(initData?.uploadId || '');
+  if (!uploadId) throw new Error('Ошибка импорта: не удалось создать сессию загрузки');
+
+  const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+  for (let index = 0; index < totalChunks; index++) {
+    const start = index * CHUNK_SIZE;
+    const end = Math.min(file.size, start + CHUNK_SIZE);
+    const chunkBlob = file.slice(start, end);
+
+    const fd = new FormData();
+    fd.append('chunk', chunkBlob, `${file.name}.part${index}`);
+    fd.append('index', String(index));
+
+    const chunkRes = await fetch(`/api/admin/import/excel/chunk/${encodeURIComponent(uploadId)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+    });
+
+    if (!chunkRes.ok) {
+      throw new Error(await parseImportError(chunkRes));
+    }
+  }
+
+  const completeRes = await fetch(`/api/admin/import/excel/chunk/${encodeURIComponent(uploadId)}/complete`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ supplier, filename: file.name }),
+  });
+
+  if (!completeRes.ok) {
+    throw new Error(await parseImportError(completeRes));
+  }
+
+  return completeRes.json();
 }
 
 export async function adminUploadProductImage(token: string, file: File) {
