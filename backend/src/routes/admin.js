@@ -16,6 +16,15 @@ const { slugify, getImportSupplier, buildProductKey } = require("../utils");
 
 const router = express.Router();
 
+function normalizeImageUrl(raw) {
+  const v = String(raw || "").trim();
+  if (!v) return "";
+  if (/^https?:\/\//i.test(v) || v.startsWith("data:") || v.startsWith("blob:")) return v;
+  if (v.startsWith("/api/uploads/") || v.startsWith("/api/prodImage/")) return v;
+  if (v.startsWith("/uploads/") || v.startsWith("/prodImage/")) return `/api${v}`;
+  return v.startsWith("/") ? v : `/${v}`;
+}
+
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -232,8 +241,8 @@ router.get("/catalog", requireAdmin, async (req, res) => {
       brandOrGroup: p.brandOrGroup || "",
       unit: p.unit || "шт",
       sku: p.sku || "",
-      image: p.image || "",
-      images: Array.isArray(p.images) ? p.images : [],
+      image: normalizeImageUrl(p.image),
+      images: (Array.isArray(p.images) ? p.images : []).map((x) => normalizeImageUrl(x)).filter(Boolean),
       description: p.description || "",
       stockQty: p.stockQty,
       prices: p.prices || {},
@@ -249,7 +258,7 @@ router.get("/catalog", requireAdmin, async (req, res) => {
     const metaMap = new Map(metas.map((m) => [m.category_id, m]));
     for (const [id, cat] of categoriesMap.entries()) {
       const meta = metaMap.get(id);
-      if (meta && meta.image) cat.image = meta.image;
+      if (meta && meta.image) cat.image = normalizeImageUrl(meta.image);
     }
   }
 
@@ -273,7 +282,7 @@ router.get("/categories", requireAdmin, async (req, res) => {
     const metaMap = new Map(metas.map((m) => [m.category_id, m]));
     for (const [id, cat] of categoriesMap.entries()) {
       const meta = metaMap.get(id);
-      if (meta && meta.image) cat.image = meta.image;
+      if (meta && meta.image) cat.image = normalizeImageUrl(meta.image);
       if (meta && meta.title && !cat.title) cat.title = meta.title;
     }
   }
@@ -307,7 +316,7 @@ router.patch("/categories/:id", requireAdmin, async (req, res) => {
     category: {
       id: saved.category_id,
       title: saved.title || "",
-      image: saved.image || ""
+      image: normalizeImageUrl(saved.image)
     }
   });
 });
