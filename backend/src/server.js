@@ -27,9 +27,11 @@ app.use(express.json({ limit: "2mb" }));
 
 // Serve uploaded product images
 app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
+app.use("/api/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
 // Backward-compatible alias (older builds used /prodImage)
 app.use("/prodImage", express.static(path.join(__dirname, "..", "uploads", "products")));
+app.use("/api/prodImage", express.static(path.join(__dirname, "..", "uploads", "products")));
 
 
 const emailLimiter = rateLimit({
