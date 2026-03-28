@@ -8,12 +8,8 @@ import AboutSlider from "../components/InfographicSection";
 import { Category, Product, SiteSettings } from '../types';
 import { CATEGORY_IMAGES, DEFAULT_CATEGORY_IMAGE } from '../constants';
 import { Link } from 'react-router-dom';
-import penoplexProduct01 from '../components/img/company/penoplex-product-01.jpg';
-import brandPlastfoil from '../components/img/company/plastoil.webp';
-import brandPanelsan from '../components/img/company/panelsan.png';
-import brandFachmann from '../components/img/company/fachman.jpeg';
-import brandRheinzink from '../components/img/company/brand-rheinzink.jpg';
-import brandAkfa from '../components/img/company/brand-akfa.jpg';
+import { DEFAULT_PRODUCT_SLIDE_IMAGES } from '../homepageDefaults';
+import { normalizeAssetUrl } from '../utils/assetUrl';
 
 interface HomePageProps {
   categories: Category[];
@@ -22,16 +18,16 @@ interface HomePageProps {
 }
 
 const LOCAL_CATEGORY_IMAGES: Record<string, string> = {
-  plastfoil: brandPlastfoil,
-  penoplex: penoplexProduct01,
-  rheinzink: brandRheinzink,
-  fachmann: brandFachmann,
-  panelsan: brandPanelsan,
-  akfa: brandAkfa,
-  skyplast: brandRheinzink,
-  protan: brandRheinzink,
-  uteplitel: penoplexProduct01,
-  default: brandPlastfoil,
+  plastfoil: DEFAULT_PRODUCT_SLIDE_IMAGES.plastfoil,
+  penoplex: DEFAULT_PRODUCT_SLIDE_IMAGES.penoplex,
+  rheinzink: DEFAULT_PRODUCT_SLIDE_IMAGES.rheinzink,
+  fachmann: DEFAULT_PRODUCT_SLIDE_IMAGES.fachmann,
+  panelsan: DEFAULT_PRODUCT_SLIDE_IMAGES.panelsan,
+  akfa: DEFAULT_PRODUCT_SLIDE_IMAGES.akfa,
+  skyplast: DEFAULT_PRODUCT_SLIDE_IMAGES.rheinzink,
+  protan: DEFAULT_PRODUCT_SLIDE_IMAGES.rheinzink,
+  uteplitel: DEFAULT_PRODUCT_SLIDE_IMAGES.penoplex,
+  default: DEFAULT_PRODUCT_SLIDE_IMAGES.plastfoil,
 };
 
 const BRAND_ORDER = [
@@ -62,12 +58,12 @@ const BRAND_DESCRIPTIONS: Record<(typeof BRAND_ORDER)[number], string> = {
 };
 
 const BRAND_IMAGE_FALLBACKS: Record<(typeof BRAND_ORDER)[number], string> = {
-  plastfoil: brandPlastfoil,
-  panelsan: brandPanelsan,
-  fachmann: brandFachmann,
-  rheinzink: brandRheinzink,
-  penoplex: penoplexProduct01,
-  akfa: brandAkfa,
+  plastfoil: DEFAULT_PRODUCT_SLIDE_IMAGES.plastfoil,
+  panelsan: DEFAULT_PRODUCT_SLIDE_IMAGES.panelsan,
+  fachmann: DEFAULT_PRODUCT_SLIDE_IMAGES.fachmann,
+  rheinzink: DEFAULT_PRODUCT_SLIDE_IMAGES.rheinzink,
+  penoplex: DEFAULT_PRODUCT_SLIDE_IMAGES.penoplex,
+  akfa: DEFAULT_PRODUCT_SLIDE_IMAGES.akfa,
 };
 
 const normalizeBrandKey = (value: string) =>
@@ -168,8 +164,16 @@ const HomePage: React.FC<HomePageProps> = ({ categories, siteSettings }) => {
         BRAND_ORDER.indexOf(a.brandKey) - BRAND_ORDER.indexOf(b.brandKey)
     );
 
-  // Always use curated DEFAULT_PRODUCT_SLIDES with 6 brands for consistent display
-  const productSlides = DEFAULT_PRODUCT_SLIDES;
+  const productSlideImageOverrides = new Map(
+    (siteSettings?.homepageImages?.productSlides || [])
+      .map((item) => [String(item?.id || '').trim(), normalizeAssetUrl(item?.image)])
+      .filter((entry): entry is [string, string] => Boolean(entry[0]))
+  );
+
+  const productSlides = DEFAULT_PRODUCT_SLIDES.map((slide) => ({
+    ...slide,
+    image: productSlideImageOverrides.get(slide.id) || slide.image,
+  }));
 
   const safeActiveProductIndex = Math.min(
     Math.max(activeProductIndex, 0),
@@ -466,7 +470,7 @@ const HomePage: React.FC<HomePageProps> = ({ categories, siteSettings }) => {
         </div>
       </section>
 
-      <PartnersSection />
+      <PartnersSection images={siteSettings?.homepageImages} />
 
       {/* Contacts Section */}
       <section className="py-24 bg-blue-900 text-white" id="contacts">

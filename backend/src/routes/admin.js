@@ -13,18 +13,9 @@ const Lead = require("../models/Lead");
 const SiteSettings = require("../models/SiteSettings");
 const { requireAdmin } = require("../middleware/auth");
 const { workbookToProducts } = require("../services/excelImport");
-const { slugify, getImportSupplier, buildProductKey } = require("../utils");
+const { slugify, getImportSupplier, buildProductKey, normalizeImageUrl, normalizeSiteSettings } = require("../utils");
 
 const router = express.Router();
-
-function normalizeImageUrl(raw) {
-  const v = String(raw || "").trim();
-  if (!v) return "";
-  if (/^https?:\/\//i.test(v) || v.startsWith("data:") || v.startsWith("blob:")) return v;
-  if (v.startsWith("/api/uploads/") || v.startsWith("/api/prodImage/")) return v;
-  if (v.startsWith("/uploads/") || v.startsWith("/prodImage/")) return `/api${v}`;
-  return v.startsWith("/") ? v : `/${v}`;
-}
 
 
 const upload = multer({
@@ -773,7 +764,7 @@ router.delete("/leads/:id", requireAdmin, async (req, res) => {
 // ── Site Settings (Homepage Constructor) ──────────────────────────────────
 router.get("/site-settings", requireAdmin, async (req, res) => {
   const settings = await SiteSettings.findOne().lean();
-  res.json({ ok: true, settings: settings || {} });
+  res.json({ ok: true, settings: normalizeSiteSettings(settings || {}) });
 });
 
 router.put("/site-settings", requireAdmin, async (req, res) => {
@@ -783,6 +774,7 @@ router.put("/site-settings", requireAdmin, async (req, res) => {
     "kaspiEnabled", "kaspiUrl",
     "halykEnabled", "halykUrl",
     "heroSlides", "aboutSlides",
+    "homepageImages",
   ];
   const update = {};
   for (const key of allowed) {
@@ -793,7 +785,7 @@ router.put("/site-settings", requireAdmin, async (req, res) => {
     { $set: update },
     { new: true, upsert: true }
   ).lean();
-  res.json({ ok: true, settings });
+  res.json({ ok: true, settings: normalizeSiteSettings(settings) });
 });
 
 module.exports = router;

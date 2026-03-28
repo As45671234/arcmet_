@@ -76,6 +76,58 @@ function rowNonEmptyCount(row) {
   return row.reduce((acc, c) => acc + (String(c || "").trim() ? 1 : 0), 0);
 }
 
+function normalizeImageUrl(raw) {
+  const v = String(raw || "").trim();
+  if (!v) return "";
+  if (/^https?:\/\//i.test(v) || v.startsWith("data:") || v.startsWith("blob:")) return v;
+  if (v.startsWith("/api/uploads/") || v.startsWith("/api/prodImage/")) return v;
+  if (v.startsWith("/uploads/") || v.startsWith("/prodImage/")) return `/api${v}`;
+  return v.startsWith("/") ? v : `/${v}`;
+}
+
+function normalizeSiteSettings(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const homepageImages = src.homepageImages && typeof src.homepageImages === "object"
+    ? src.homepageImages
+    : {};
+
+  return {
+    ...src,
+    heroSlides: Array.isArray(src.heroSlides)
+      ? src.heroSlides.map((slide) => ({
+          ...slide,
+          img: normalizeImageUrl(slide && slide.img)
+        }))
+      : [],
+    aboutSlides: Array.isArray(src.aboutSlides)
+      ? src.aboutSlides.map((slide) => ({
+          ...slide,
+          imageUrl: normalizeImageUrl(slide && slide.imageUrl),
+          bullets: Array.isArray(slide && slide.bullets)
+            ? slide.bullets.map((item) => String(item || "").trim()).filter(Boolean)
+            : []
+        }))
+      : [],
+    homepageImages: {
+      ...homepageImages,
+      headerLogo: normalizeImageUrl(homepageImages.headerLogo),
+      footerLogo: normalizeImageUrl(homepageImages.footerLogo),
+      partnersBackground: normalizeImageUrl(homepageImages.partnersBackground),
+      productSlides: Array.isArray(homepageImages.productSlides)
+        ? homepageImages.productSlides
+            .map((item) => ({
+              id: String(item && item.id ? item.id : "").trim(),
+              image: normalizeImageUrl(item && item.image)
+            }))
+            .filter((item) => item.id)
+        : [],
+      partnerLogos: Array.isArray(homepageImages.partnerLogos)
+        ? homepageImages.partnerLogos.map((item) => normalizeImageUrl(item)).filter(Boolean)
+        : []
+    }
+  };
+}
+
 module.exports = {
   slugify,
   parseNumber,
@@ -84,5 +136,7 @@ module.exports = {
   IMPORT_SUPPLIERS,
   getImportSupplier,
   normalizeSupplierChoice,
-  buildProductKey
+  buildProductKey,
+  normalizeImageUrl,
+  normalizeSiteSettings
 };

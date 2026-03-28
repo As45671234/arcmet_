@@ -2,15 +2,19 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Category } from '../types';
+import { DEFAULT_HOMEPAGE_IMAGES } from '../homepageDefaults';
+import { normalizeAssetUrl } from '../utils/assetUrl';
 
 interface HeaderProps {
   cartCount: number;
   categories: Category[];
   phone?: string;
+  logoUrl?: string;
 }
 
-const Header: React.FC<HeaderProps> = ({ cartCount, categories, phone }) => {
+const Header: React.FC<HeaderProps> = ({ cartCount, categories, phone, logoUrl }) => {
   const PHONE = phone || '+7 775 702 92 98';
+  const LOGO_URL = normalizeAssetUrl(logoUrl) || DEFAULT_HOMEPAGE_IMAGES.headerLogo;
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileCatalogOpen, setMobileCatalogOpen] = useState(false);
@@ -60,7 +64,7 @@ const Header: React.FC<HeaderProps> = ({ cartCount, categories, phone }) => {
     >
       <div className="container mx-auto px-6 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <img src="/logos/logo.png" alt="Logo" className="w-10 h-10" />
+          <img src={LOGO_URL} alt="Logo" className="w-10 h-10 object-contain" />
           <span className="text-xl font-extrabold tracking-tighter text-blue-900">ARCMET</span>
         </Link>
 

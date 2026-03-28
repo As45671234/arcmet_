@@ -1,8 +1,10 @@
 
 import React, { useEffect, useState } from 'react';
-import { Category, SiteSettings } from '../types';
+import { Category, HomepageImages, SiteSettings } from '../types';
 import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage, adminPatchCategory, adminPurgeAll, adminGetSiteSettings, adminSaveSiteSettings, adminUploadImage } from '../services/api';
 import { IMPORT_SUPPLIERS } from '../constants';
+import { DEFAULT_HOMEPAGE_IMAGES } from '../homepageDefaults';
+import { normalizeAssetUrl } from '../utils/assetUrl';
 
 const DEFAULT_SITE_SETTINGS: SiteSettings = {
   phone: '+7 775 702 92 98',
@@ -52,6 +54,40 @@ const DEFAULT_SITE_SETTINGS: SiteSettings = {
       bullets: ['Личный менеджер', 'Оперативные ответы', 'Поддержка сложных проектов'],
     },
   ],
+  homepageImages: DEFAULT_HOMEPAGE_IMAGES,
+};
+
+const mergeHomepageImages = (raw?: Partial<HomepageImages> | null): HomepageImages => {
+  const src = raw || {};
+  const productSlideOverrides = new Map(
+    (Array.isArray(src.productSlides) ? src.productSlides : [])
+      .map((item) => [String(item?.id || '').trim(), String(item?.image || '')] as const)
+      .filter((entry) => Boolean(entry[0]))
+  );
+
+  const partnerLogos = Array.isArray(src.partnerLogos) ? src.partnerLogos : [];
+
+  return {
+    headerLogo: String(src.headerLogo || DEFAULT_HOMEPAGE_IMAGES.headerLogo || ''),
+    footerLogo: String(src.footerLogo || DEFAULT_HOMEPAGE_IMAGES.footerLogo || ''),
+    partnersBackground: String(src.partnersBackground || DEFAULT_HOMEPAGE_IMAGES.partnersBackground || ''),
+    productSlides: DEFAULT_HOMEPAGE_IMAGES.productSlides.map((item) => ({
+      id: item.id,
+      image: String(productSlideOverrides.get(item.id) || item.image || ''),
+    })),
+    partnerLogos: DEFAULT_HOMEPAGE_IMAGES.partnerLogos.map((item, index) => String(partnerLogos[index] || item || '')),
+  };
+};
+
+const mergeSiteSettings = (raw?: Partial<SiteSettings> | null): SiteSettings => {
+  const src = raw || {};
+  return {
+    ...DEFAULT_SITE_SETTINGS,
+    ...src,
+    heroSlides: Array.isArray(src.heroSlides) && src.heroSlides.length > 0 ? src.heroSlides : DEFAULT_SITE_SETTINGS.heroSlides,
+    aboutSlides: Array.isArray(src.aboutSlides) && src.aboutSlides.length > 0 ? src.aboutSlides : DEFAULT_SITE_SETTINGS.aboutSlides,
+    homepageImages: mergeHomepageImages(src.homepageImages),
+  };
 };
 
 interface AdminDashboardProps {
@@ -139,7 +175,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
   const [categoryImageDrafts, setCategoryImageDrafts] = useState<Record<string, string>>({});
   const [constructorLoading, setConstructorLoading] = useState(false);
   const [constructorSaving, setConstructorSaving] = useState(false);
-  const [siteForm, setSiteForm] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
+  const [siteForm, setSiteForm] = useState<SiteSettings>(mergeSiteSettings(DEFAULT_SITE_SETTINGS));
 
   // Orders
   const [orders, setOrders] = useState<any[]>([]);
@@ -259,6 +295,39 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
       )
     ).slice(0, 3);
 
+  const uploadConstructorImage = async (file: File) => {
+    const adminToken = getAdminToken() || '';
+    return adminUploadImage(adminToken, file);
+  };
+
+  const updateHomepageImages = (patch: Partial<HomepageImages>) => {
+    setSiteForm((prev) => ({
+      ...prev,
+      homepageImages: {
+        ...mergeHomepageImages(prev.homepageImages),
+        ...patch,
+      },
+    }));
+  };
+
+  const updateHomepageProductSlide = (id: string, image: string) => {
+    setSiteForm((prev) => ({
+      ...prev,
+      homepageImages: {
+        ...mergeHomepageImages(prev.homepageImages),
+        productSlides: mergeHomepageImages(prev.homepageImages).productSlides.map((item) =>
+          item.id === id ? { ...item, image } : item
+        ),
+      },
+    }));
+  };
+
+  const updateHomepagePartnerLogo = (index: number, image: string) => {
+    const nextLogos = [...mergeHomepageImages(siteForm.homepageImages).partnerLogos];
+    nextLogos[index] = image;
+    updateHomepageImages({ partnerLogos: nextLogos });
+  };
+
   const refreshAdmin = async () => {
     const data = await fetchAdminCatalog(token);
     setAdminCategories(data.categories as any);
@@ -279,12 +348,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
     try {
       const data = await adminGetSiteSettings(token);
       const s = data?.settings || {};
-      setSiteForm({
-        ...DEFAULT_SITE_SETTINGS,
-        ...s,
-        heroSlides: Array.isArray(s.heroSlides) && s.heroSlides.length > 0 ? s.heroSlides : DEFAULT_SITE_SETTINGS.heroSlides,
-        aboutSlides: Array.isArray(s.aboutSlides) && s.aboutSlides.length > 0 ? s.aboutSlides : DEFAULT_SITE_SETTINGS.aboutSlides,
-      });
+      setSiteForm(mergeSiteSettings(s));
     } catch (error) {
       console.error(error);
     } finally {
@@ -393,6 +457,7 @@ useEffect(() => {
     if (!token) return;
     setConstructorSaving(true);
     try {
+      const homepageImages = mergeHomepageImages(siteForm.homepageImages);
       const payload = {
         ...siteForm,
         heroSlides: (siteForm.heroSlides || []).map((s) => ({
@@ -409,6 +474,18 @@ useEffect(() => {
             ? s.bullets.map((b) => String(b || '').trim()).filter(Boolean)
             : [],
         })),
+        homepageImages: {
+          headerLogo: String(homepageImages.headerLogo || '').trim(),
+          footerLogo: String(homepageImages.footerLogo || '').trim(),
+          partnersBackground: String(homepageImages.partnersBackground || '').trim(),
+          productSlides: (homepageImages.productSlides || []).map((item) => ({
+            id: String(item.id || '').trim(),
+            image: String(item.image || '').trim(),
+          })),
+          partnerLogos: (homepageImages.partnerLogos || [])
+            .map((item) => String(item || '').trim())
+            .filter(Boolean),
+        },
       };
       await adminSaveSiteSettings(token, payload);
       alert('Конструктор главной страницы сохранен');
@@ -1506,6 +1583,154 @@ useEffect(() => {
                   </div>
                 </div>
 
+                <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100 space-y-6">
+                  <h4 className="text-lg font-black text-blue-900 uppercase tracking-wider">Все изображения главной страницы</h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {[
+                      { key: 'headerLogo', label: 'Логотип в Header' },
+                      { key: 'footerLogo', label: 'Логотип в Footer' },
+                      { key: 'partnersBackground', label: 'Фон секции Партнёры' },
+                    ].map((item) => {
+                      const value = siteForm.homepageImages?.[item.key as keyof HomepageImages] as string;
+                      const preview = normalizeAssetUrl(value);
+
+                      return (
+                        <div key={item.key} className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3">
+                          <div className="text-sm font-black text-gray-700 uppercase">{item.label}</div>
+                          <div className="h-32 rounded-2xl overflow-hidden border border-gray-200 bg-gray-50 flex items-center justify-center">
+                            {preview ? (
+                              <img src={preview} alt={item.label} className="w-full h-full object-contain" />
+                            ) : (
+                              <i className="fas fa-image text-3xl text-gray-300"></i>
+                            )}
+                          </div>
+                          <input
+                            className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm"
+                            value={value || ''}
+                            onChange={(e) => updateHomepageImages({ [item.key]: e.target.value } as Partial<HomepageImages>)}
+                            placeholder="URL изображения"
+                          />
+                          <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold hover:bg-blue-100 transition-colors">
+                            <i className="fas fa-upload"></i> Загрузить файл
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                try {
+                                  const url = await uploadConstructorImage(file);
+                                  updateHomepageImages({ [item.key]: url } as Partial<HomepageImages>);
+                                } catch {
+                                  alert('Ошибка загрузки изображения');
+                                } finally {
+                                  e.target.value = '';
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-4">
+                    <div className="text-sm font-black text-gray-700 uppercase">Карточки блока Наша продукция</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {(siteForm.homepageImages?.productSlides || []).map((item) => {
+                        const preview = normalizeAssetUrl(item.image);
+                        return (
+                          <div key={item.id} className="rounded-2xl border border-gray-100 p-4 space-y-3 bg-gray-50">
+                            <div className="text-xs font-black text-gray-500 uppercase tracking-widest">{item.id}</div>
+                            <div className="h-32 rounded-2xl overflow-hidden border border-gray-200 bg-white flex items-center justify-center">
+                              {preview ? (
+                                <img src={preview} alt={item.id} className="w-full h-full object-cover" />
+                              ) : (
+                                <i className="fas fa-image text-3xl text-gray-300"></i>
+                              )}
+                            </div>
+                            <input
+                              className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm"
+                              value={item.image || ''}
+                              onChange={(e) => updateHomepageProductSlide(item.id, e.target.value)}
+                              placeholder="URL изображения"
+                            />
+                            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold hover:bg-blue-100 transition-colors">
+                              <i className="fas fa-upload"></i> Загрузить файл
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  try {
+                                    const url = await uploadConstructorImage(file);
+                                    updateHomepageProductSlide(item.id, url);
+                                  } catch {
+                                    alert('Ошибка загрузки изображения');
+                                  } finally {
+                                    e.target.value = '';
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-4">
+                    <div className="text-sm font-black text-gray-700 uppercase">Логотипы партнёров</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {(siteForm.homepageImages?.partnerLogos || []).map((logo, index) => {
+                        const preview = normalizeAssetUrl(logo);
+                        return (
+                          <div key={`partner-logo-${index}`} className="rounded-2xl border border-gray-100 p-4 space-y-3 bg-gray-50">
+                            <div className="text-xs font-black text-gray-500 uppercase tracking-widest">Логотип #{index + 1}</div>
+                            <div className="h-28 rounded-2xl overflow-hidden border border-gray-200 bg-white flex items-center justify-center p-3">
+                              {preview ? (
+                                <img src={preview} alt={`Партнёр ${index + 1}`} className="max-h-full max-w-full object-contain" />
+                              ) : (
+                                <i className="fas fa-image text-3xl text-gray-300"></i>
+                              )}
+                            </div>
+                            <input
+                              className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm"
+                              value={logo || ''}
+                              onChange={(e) => updateHomepagePartnerLogo(index, e.target.value)}
+                              placeholder="URL логотипа"
+                            />
+                            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold hover:bg-blue-100 transition-colors">
+                              <i className="fas fa-upload"></i> Загрузить файл
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  try {
+                                    const url = await uploadConstructorImage(file);
+                                    updateHomepagePartnerLogo(index, url);
+                                  } catch {
+                                    alert('Ошибка загрузки изображения');
+                                  } finally {
+                                    e.target.value = '';
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100">
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="text-lg font-black text-blue-900 uppercase tracking-wider">Слайды Hero</h4>
@@ -1568,7 +1793,7 @@ useEffect(() => {
                           {slide.img ? (
                             <div className="relative flex-shrink-0 w-24 h-20 rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
                               <img
-                                src={slide.img}
+                                src={normalizeAssetUrl(slide.img)}
                                 alt="preview"
                                 className="w-full h-full object-cover"
                                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
@@ -1610,14 +1835,15 @@ useEffect(() => {
                                   const file = e.target.files?.[0];
                                   if (!file) return;
                                   try {
-                                    const token = getAdminToken() || '';
-                                    const url = await adminUploadImage(token, file);
+                                    const url = await uploadConstructorImage(file);
                                     setSiteForm((prev) => ({
                                       ...prev,
                                       heroSlides: (prev.heroSlides || []).map((s, i) => i === idx ? { ...s, img: url } : s),
                                     }));
                                   } catch {
                                     alert('Ошибка загрузки изображения');
+                                  } finally {
+                                    e.target.value = '';
                                   }
                                 }}
                               />
@@ -1677,15 +1903,67 @@ useEffect(() => {
                           }))}
                           placeholder="Текст"
                         />
-                        <input
-                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
-                          value={slide.imageUrl || ''}
-                          onChange={(e) => setSiteForm((prev) => ({
-                            ...prev,
-                            aboutSlides: (prev.aboutSlides || []).map((s, i) => i === idx ? { ...s, imageUrl: e.target.value } : s),
-                          }))}
-                          placeholder="URL изображения"
-                        />
+                        <div className="flex gap-3 items-start">
+                          {slide.imageUrl ? (
+                            <div className="relative flex-shrink-0 w-24 h-20 rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+                              <img
+                                src={normalizeAssetUrl(slide.imageUrl)}
+                                alt="preview"
+                                className="w-full h-full object-cover"
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                              />
+                              <button
+                                type="button"
+                                title="Удалить изображение"
+                                onClick={() => setSiteForm((prev) => ({
+                                  ...prev,
+                                  aboutSlides: (prev.aboutSlides || []).map((s, i) => i === idx ? { ...s, imageUrl: '' } : s),
+                                }))}
+                                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center shadow"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex-shrink-0 w-24 h-20 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center text-gray-300 text-2xl">
+                              <i className="fas fa-image"></i>
+                            </div>
+                          )}
+                          <div className="flex-grow space-y-2">
+                            <input
+                              className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm"
+                              value={slide.imageUrl || ''}
+                              onChange={(e) => setSiteForm((prev) => ({
+                                ...prev,
+                                aboutSlides: (prev.aboutSlides || []).map((s, i) => i === idx ? { ...s, imageUrl: e.target.value } : s),
+                              }))}
+                              placeholder="URL изображения"
+                            />
+                            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold hover:bg-blue-100 transition-colors">
+                              <i className="fas fa-upload"></i> Загрузить файл
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  try {
+                                    const url = await uploadConstructorImage(file);
+                                    setSiteForm((prev) => ({
+                                      ...prev,
+                                      aboutSlides: (prev.aboutSlides || []).map((s, i) => i === idx ? { ...s, imageUrl: url } : s),
+                                    }));
+                                  } catch {
+                                    alert('Ошибка загрузки изображения');
+                                  } finally {
+                                    e.target.value = '';
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
                         <textarea
                           className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 min-h-[90px]"
                           value={Array.isArray(slide.bullets) ? slide.bullets.join('\n') : ''}

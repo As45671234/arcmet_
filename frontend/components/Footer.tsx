@@ -2,7 +2,8 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { SiteSettings } from '../types';
-import logo from './img/logo.png';
+import { DEFAULT_HOMEPAGE_IMAGES } from '../homepageDefaults';
+import { normalizeAssetUrl } from '../utils/assetUrl';
 
 interface FooterProps {
   siteSettings?: SiteSettings | null;
@@ -22,6 +23,7 @@ const Footer: React.FC<FooterProps> = ({ siteSettings }) => {
   const halykEnabled = siteSettings?.halykEnabled ?? true;
   const kaspiUrl = siteSettings?.kaspiUrl || 'https://kaspi.kz/shop/info/merchant/17410012/reviews/?productCode=136545715&masterSku=136545715&merchantSku=424870474&tabId=PRODUCT';
   const halykUrl = siteSettings?.halykUrl || 'https://halykbank.kz/';
+  const logoUrl = normalizeAssetUrl(siteSettings?.homepageImages?.footerLogo) || DEFAULT_HOMEPAGE_IMAGES.footerLogo;
 
   const goToSection = (id: string) => {
     const doScroll = () => {
@@ -43,7 +45,7 @@ const Footer: React.FC<FooterProps> = ({ siteSettings }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-16 mb-20">
           <div className="space-y-6">
             <div className="flex items-center gap-2">
-              <img src={logo} alt="Logo" className="w-12 h-12" />
+              <img src={logoUrl} alt="Logo" className="w-12 h-12 object-contain" />
               <span className="text-2xl font-black tracking-tighter">ARCMET</span>
             </div>
             <p className="text-blue-300 leading-relaxed text-sm">

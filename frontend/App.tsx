@@ -139,6 +139,7 @@ const App: React.FC = () => {
           cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
           categories={categories}
           phone={siteSettings?.phone}
+          logoUrl={siteSettings?.homepageImages?.headerLogo}
         />
 
         {toast && (

@@ -4,15 +4,7 @@ const Order = require("../models/Order");
 const Lead = require("../models/Lead");
 const CategoryMeta = require("../models/CategoryMeta");
 const SiteSettings = require("../models/SiteSettings");
-
-function normalizeImageUrl(raw) {
-  const v = String(raw || "").trim();
-  if (!v) return "";
-  if (/^https?:\/\//i.test(v) || v.startsWith("data:") || v.startsWith("blob:")) return v;
-  if (v.startsWith("/api/uploads/") || v.startsWith("/api/prodImage/")) return v;
-  if (v.startsWith("/uploads/") || v.startsWith("/prodImage/")) return `/api${v}`;
-  return v.startsWith("/") ? v : `/${v}`;
-}
+const { normalizeImageUrl, normalizeSiteSettings } = require("../utils");
 
 function normalizeOrderItems(items) {
   if (!Array.isArray(items)) return [];
@@ -142,7 +134,7 @@ function publicRoutes(emailLimiter) {
   // Public site settings (phone, email, address, kaspi/halyk links, hero/about slides)
   router.get("/site-settings", async (req, res) => {
     const settings = await SiteSettings.findOne().lean();
-    res.json({ ok: true, settings: settings || {} });
+    res.json({ ok: true, settings: normalizeSiteSettings(settings || {}) });
   });
 
   return router;

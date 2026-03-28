@@ -86,6 +86,19 @@ export interface AboutSlide {
   bullets: string[];
 }
 
+export interface HomepageProductSlideImage {
+  id: string;
+  image: string;
+}
+
+export interface HomepageImages {
+  headerLogo: string;
+  footerLogo: string;
+  partnersBackground: string;
+  productSlides: HomepageProductSlideImage[];
+  partnerLogos: string[];
+}
+
 export interface SiteSettings {
   phone: string;
   email: string;
@@ -96,4 +109,5 @@ export interface SiteSettings {
   halykUrl: string;
   heroSlides: HeroSlide[];
   aboutSlides: AboutSlide[];
+  homepageImages: HomepageImages;
 }

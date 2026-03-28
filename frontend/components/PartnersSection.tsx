@@ -1,32 +1,24 @@
 import React, { useEffect, useMemo, useRef } from 'react';
+import { HomepageImages } from '../types';
+import { DEFAULT_HOMEPAGE_IMAGES, DEFAULT_PARTNER_LOGOS } from '../homepageDefaults';
+import { normalizeAssetUrl } from '../utils/assetUrl';
 
-import qsLogo from './img/qs.png';
-import simbolLogo from './img/sembol.png';
-import sskLogo from './img/ssk.jpg';
-import svoyLogo from './img/svoy.png';
-import aigulLogo from './img/aigul.png';
-import astanaLogo from './img/astana.png';
-import biGroupLogo from './img/Bi-group.png';
-import mamyrLogo from './img/mamyr.jpg';
-import megaLogo from './img/MEGA.png';
+interface PartnersSectionProps {
+  images?: HomepageImages;
+}
 
-const PartnersSection: React.FC = () => {
+const PartnersSection: React.FC<PartnersSectionProps> = ({ images }) => {
   const trackRef = useRef<HTMLDivElement | null>(null);
 
   const logos = useMemo(
-    () => [
-      qsLogo,
-      simbolLogo,
-      sskLogo,
-      svoyLogo,
-      aigulLogo,
-      astanaLogo,
-      biGroupLogo,
-      mamyrLogo,
-      megaLogo
-    ],
-    []
+    () => {
+      const custom = (images?.partnerLogos || []).map((item) => normalizeAssetUrl(item)).filter(Boolean);
+      return custom.length > 0 ? custom : DEFAULT_PARTNER_LOGOS;
+    },
+    [images?.partnerLogos]
   );
+
+  const partnersBackground = normalizeAssetUrl(images?.partnersBackground) || DEFAULT_HOMEPAGE_IMAGES.partnersBackground;
 
   useEffect(() => {
     const el = trackRef.current;
@@ -73,7 +65,7 @@ const PartnersSection: React.FC = () => {
           </div>
 
           <img
-            src="https://arcmet.kz/wp-content/themes/arcmet/img/gor-fon.svg"
+            src={partnersBackground}
             alt=""
             className="absolute right-0 bottom-0 w-[520px] max-w-none opacity-20 pointer-events-none select-none"
           />

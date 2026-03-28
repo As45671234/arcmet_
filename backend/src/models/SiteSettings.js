@@ -29,6 +29,18 @@ const siteSettingsSchema = new mongoose.Schema(
         bullets: [{ type: String }],
       },
     ],
+    homepageImages: {
+      headerLogo: { type: String, default: '' },
+      footerLogo: { type: String, default: '' },
+      partnersBackground: { type: String, default: '' },
+      productSlides: [
+        {
+          id: { type: String, default: '' },
+          image: { type: String, default: '' },
+        },
+      ],
+      partnerLogos: [{ type: String }],
+    },
   },
   { timestamps: true }
 );
