@@ -1,15 +1,27 @@
 
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { SiteSettings } from '../types';
 import logo from './img/logo.png';
 
-const Footer: React.FC = () => {
+interface FooterProps {
+  siteSettings?: SiteSettings | null;
+}
+
+const Footer: React.FC<FooterProps> = ({ siteSettings }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const whatsappPhone = String(import.meta.env.VITE_WHATSAPP_PHONE || '').replace(/[^\d]/g, '');
   const whatsappUrl = whatsappPhone
     ? `https://wa.me/${whatsappPhone}?text=${encodeURIComponent('Здравствуйте! Хочу заказать консультацию.')}`
     : '';
+  const phone = siteSettings?.phone || '+7 775 702 92 98';
+  const email = siteSettings?.email || 'ceo@arcmet.kz';
+  const address = siteSettings?.address || 'Талапкерская 26а, офис 202';
+  const kaspiEnabled = siteSettings?.kaspiEnabled ?? true;
+  const halykEnabled = siteSettings?.halykEnabled ?? true;
+  const kaspiUrl = siteSettings?.kaspiUrl || 'https://kaspi.kz/shop/info/merchant/17410012/reviews/?productCode=136545715&masterSku=136545715&merchantSku=424870474&tabId=PRODUCT';
+  const halykUrl = siteSettings?.halykUrl || 'https://halykbank.kz/';
 
   const goToSection = (id: string) => {
     const doScroll = () => {
@@ -87,21 +99,64 @@ const Footer: React.FC = () => {
               <div className="flex gap-4">
                 <i className="fas fa-phone mt-1 text-blue-500"></i>
                 <div>
-                  <div className="font-bold text-white mb-1">+7 707 797 85 33</div>
+                  <div className="font-bold text-white mb-1">{phone}</div>
                   <div className="text-xs uppercase font-bold text-blue-400">Пн - Сб, 09:00 - 18:00</div>
                 </div>
               </div>
               <div className="flex gap-4">
                 <i className="fas fa-envelope mt-1 text-blue-500"></i>
-                <div className="font-bold text-white">ceo@arcmet.kz</div>
+                <div className="font-bold text-white">{email}</div>
               </div>
               <div className="flex gap-4">
                 <i className="fas fa-map-marker-alt mt-1 text-blue-500"></i>
-                <div className="font-bold text-white">Талапкерская 26а, офис 202</div>
+                <div className="font-bold text-white">{address}</div>
               </div>
             </div>
           </div>
         </div>
+
+        {(kaspiEnabled || halykEnabled) && (
+          <div className="mb-10 flex flex-col gap-3 rounded-3xl border border-white/10 bg-white/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.28em] text-blue-300">Наш магазин</div>
+              <div className="mt-1 text-sm font-semibold text-white">Смотрите нас на Kaspi и Halyk</div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {kaspiEnabled ? (
+                <a
+                  href={kaspiUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#ef3124] px-4 py-2.5 text-sm font-black uppercase tracking-wide text-white shadow-[0_10px_24px_rgba(239,49,36,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(239,49,36,0.34)]"
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[#ef3124]">
+                    <svg width="16" height="16" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M8 20C8 13.373 13.373 8 20 8s12 5.373 12 12-5.373 12-12 12S8 26.627 8 20z" fill="#ef3124"/>
+                      <path d="M17 14l6 6-6 6" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </span>
+                  <span>Kaspi</span>
+                </a>
+              ) : null}
+              {halykEnabled ? (
+                <a
+                  href={halykUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#00a651] px-4 py-2.5 text-sm font-black uppercase tracking-wide text-white shadow-[0_10px_24px_rgba(0,166,81,0.24)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(0,166,81,0.32)]"
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[#00a651]">
+                    <svg width="16" height="16" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M8 20C8 13.373 13.373 8 20 8s12 5.373 12 12-5.373 12-12 12S8 26.627 8 20z" fill="#00a651"/>
+                      <path d="M14 20h12M20 14v12" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+                    </svg>
+                  </span>
+                  <span>Halyk</span>
+                </a>
+              ) : null}
+            </div>
+          </div>
+        )}
 
         <div className="pt-10 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">

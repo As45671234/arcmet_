@@ -3,6 +3,23 @@ import { useSearchParams } from 'react-router-dom';
 import { Category, Product } from '../types';
 import noPhotoImage from '../components/img/no photo/no-photo.svg';
 
+const ATTR_LABELS: Record<string, string> = {
+  thickness_mm: 'Толщина, мм',
+  roll_size_mm: 'Размер рулона, мм',
+  pack_area_m2: 'Площадь в пачке, м²',
+  pack_volume_m3: 'Объём в пачке, м³',
+  roll_area_m2: 'Площадь рулона, м²',
+  pack_qty: 'Кол-во в упаковке',
+  marking: 'Маркировка',
+  width_mm: 'Ширина, мм',
+  length_m: 'Длина, м',
+  density: 'Плотность',
+  material: 'Материал',
+  color: 'Цвет',
+  weight_kg: 'Вес, кг',
+};
+const attrLabel = (key: string) => ATTR_LABELS[key] || key.replace(/_/g, ' ');
+
 interface CatalogPageProps {
   categories: Category[];
   onAddToCart: (p: Product) => void;
@@ -19,6 +36,9 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
   const [cardImageIndexMap, setCardImageIndexMap] = useState<Record<string, number>>({});
   const [quantity, setQuantity] = useState<number>(1);
   const [isZoomed, setIsZoomed] = useState<boolean>(false);
+  const [modalTab, setModalTab] = useState<'description' | 'specs'>('description');
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [subcategoryPanelOpen, setSubcategoryPanelOpen] = useState<Record<string, boolean>>({});
   const cardTouchStartRef = useRef<Record<string, { x: number; y: number }>>({});
   const modalTouchStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -31,6 +51,15 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
 
     setSelectedSub(sub);
   }, [searchParams, categories]);
+
+  useEffect(() => {
+    if (!selectedCatId) return;
+    setSubcategoryPanelOpen((prev) => (
+      Object.prototype.hasOwnProperty.call(prev, selectedCatId)
+        ? prev
+        : { ...prev, [selectedCatId]: true }
+    ));
+  }, [selectedCatId]);
 
   useEffect(() => {
     if (!selectedProduct) return;
@@ -55,20 +84,6 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
   };
 
   const activeCategory = categories.find((c) => c.id === selectedCatId);
-
-  const subcategories: string[] = Array.from<string>(
-    new Set<string>(
-      (activeCategory?.items || [])
-        .map((p) => (p.brandOrGroup || '').trim())
-        .filter(
-          (s): s is string =>
-            s &&
-            s.length <= 40 &&
-            !/для оформления заказа/i.test(s) &&
-            !/достаточно отправить запрос/i.test(s)
-        )
-    )
-  ).sort((a, b) => a.localeCompare(b, 'ru'));
 
   const filteredProducts =
     activeCategory?.items
@@ -131,52 +146,166 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
 
   return (
     <div className="container mx-auto px-6 py-12">
-      <div className="flex flex-col lg:flex-row gap-12">
-        <aside className="w-full lg:w-72 flex-shrink-0">
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* Sidebar */}
+        <aside className={`flex-shrink-0 transition-all duration-300 ${sidebarOpen ? 'w-full lg:w-72' : 'w-full lg:w-14'}`}>
           <div className="sticky top-32">
-            <h2 className="text-2xl font-black text-blue-900 mb-8 uppercase tracking-tighter">Категории</h2>
-            <div className="space-y-2">
-              {categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => {
-                    setSelectedCatId(cat.id);
-                    setSelectedSub('');
-                    setSearchParams({ cat: cat.id });
-                  }}
-                  className={`w-full text-left px-5 py-4 rounded-2xl font-bold transition-all flex items-center justify-between ${
-                    selectedCatId === cat.id
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
-                      : 'bg-white text-blue-900 hover:bg-blue-50'
-                  }`}
-                >
-                  <span>{cat.title}</span>
-                  <span
-                    className={`text-[10px] px-2 py-1 rounded-lg ${
-                      selectedCatId === cat.id ? 'bg-blue-500' : 'bg-gray-100 text-gray-500'
-                    }`}
-                  >
-                    {cat.items.length}
-                  </span>
-                </button>
-              ))}
+            {/* Header row with toggle */}
+            <div className="flex items-center justify-between mb-4">
+              {sidebarOpen && (
+                <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Категории</h2>
+              )}
+              <button
+                onClick={() => setSidebarOpen((v) => !v)}
+                className={`p-2 rounded-xl bg-white border border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all shadow-sm ${sidebarOpen ? 'ml-auto' : 'mx-auto'}`}
+                title={sidebarOpen ? 'Скрыть панель' : 'Показать категории'}
+              >
+                <i className={`fas fa-${sidebarOpen ? 'chevron-left' : 'bars'} text-xs`}></i>
+              </button>
             </div>
 
-            <div className="mt-12 bg-blue-900 p-8 rounded-3xl text-white">
-              <h4 className="text-xl font-bold mb-4">Нужна помощь?</h4>
-              <p className="text-blue-200 text-sm mb-6 leading-relaxed">
-                Наши эксперты помогут подобрать материалы под ваш бюджет и технические требования.
+            {sidebarOpen && (
+            <div className="space-y-1">
+              {categories.map((cat) => {
+                const isActive = selectedCatId === cat.id;
+                const catSubs = Array.from<string>(
+                  new Set<string>(
+                    cat.items
+                      .map((p) => (p.brandOrGroup || '').trim())
+                      .filter(
+                        (s): s is string =>
+                          !!s &&
+                          s.length <= 40 &&
+                          !/для оформления заказа/i.test(s) &&
+                          !/достаточно отправить запрос/i.test(s)
+                      )
+                  )
+                ).sort((a, b) => a.localeCompare(b, 'ru'));
+                const isSubPanelOpen = subcategoryPanelOpen[cat.id] ?? true;
+
+                return (
+                  <div key={cat.id} className="rounded-2xl overflow-hidden">
+                    {/* Category row */}
+                    <div
+                      className={`px-4 py-3 font-bold transition-all flex items-center gap-2 rounded-2xl ${
+                        isActive
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
+                          : 'bg-white text-blue-900 hover:bg-blue-50 border border-gray-100'
+                      }`}
+                    >
+                      <button
+                        onClick={() => {
+                          setSelectedCatId(cat.id);
+                          setSelectedSub('');
+                          setSearchParams({ cat: cat.id });
+                          if (catSubs.length > 0) {
+                            setSubcategoryPanelOpen((prev) => ({ ...prev, [cat.id]: true }));
+                          }
+                        }}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      >
+                        <i
+                          className={`fas fa-${
+                            isActive
+                              ? catSubs.length > 0 ? 'folder-open' : 'folder'
+                              : catSubs.length > 0 ? 'folder' : 'tag'
+                          } text-xs flex-shrink-0 ${
+                            isActive ? 'text-blue-200' : 'text-blue-400'
+                          }`}
+                        ></i>
+                        <span className="truncate text-sm">{cat.title}</span>
+                      </button>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full flex-shrink-0 font-bold ${
+                          isActive ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-500'
+                        }`}
+                      >
+                        {cat.items.length}
+                      </span>
+                      {isActive && catSubs.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setSubcategoryPanelOpen((prev) => ({ ...prev, [cat.id]: !isSubPanelOpen }))}
+                          className={`h-7 w-7 rounded-full flex items-center justify-center transition-colors ${
+                            isActive ? 'bg-white/15 hover:bg-white/25 text-white' : 'bg-blue-50 hover:bg-blue-100 text-blue-600'
+                          }`}
+                          aria-label={isSubPanelOpen ? 'Скрыть подкатегории' : 'Показать подкатегории'}
+                          title={isSubPanelOpen ? 'Скрыть подкатегории' : 'Показать подкатегории'}
+                        >
+                          <i className={`fas fa-chevron-${isSubPanelOpen ? 'up' : 'down'} text-[10px]`}></i>
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {/* Subcategory list */}
+                    {isActive && catSubs.length > 0 && isSubPanelOpen && (
+                      <div className="mt-1 mb-1 mx-1 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
+                        {/* "Все" row */}
+                        <button
+                          onClick={() => {
+                            setSelectedSub('');
+                            const next = new URLSearchParams(searchParams);
+                            next.delete('sub');
+                            setSearchParams(next);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-3 ${
+                            !selectedSub
+                              ? 'bg-blue-50 text-blue-700 font-bold'
+                              : 'text-gray-500 hover:bg-white hover:text-gray-800'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors ${
+                            !selectedSub ? 'bg-blue-600' : 'bg-gray-300'
+                          }`} />
+                          Все подкатегории
+                        </button>
+                        <div className="h-px bg-gray-200 mx-3" />
+                        {catSubs.map((s) => (
+                          <button
+                            key={s}
+                            onClick={() => {
+                              setSelectedSub(s);
+                              const next = new URLSearchParams(searchParams);
+                              next.set('sub', s);
+                              setSearchParams(next);
+                            }}
+                            className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-3 ${
+                              selectedSub === s
+                                ? 'bg-blue-50 text-blue-700 font-bold'
+                                : 'text-gray-500 hover:bg-white hover:text-gray-800'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors ${
+                              selectedSub === s ? 'bg-blue-600' : 'bg-gray-300'
+                            }`} />
+                            <span className="truncate">{s}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            )}  {/* end sidebarOpen */}
+
+            {sidebarOpen && (
+            <div className="mt-6 bg-gradient-to-br from-blue-900 to-blue-800 p-6 rounded-2xl text-white">
+              <h4 className="text-base font-bold mb-2">Нужна помощь?</h4>
+              <p className="text-blue-200 text-xs mb-4 leading-relaxed">
+                Наши эксперты помогут подобрать материалы под ваш бюджет.
               </p>
               <button
-                className={`w-full py-3 font-bold rounded-xl text-sm ${
-                  hasWhatsapp ? 'bg-yellow-500 text-blue-900' : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                }`}
+                className={`w-full py-2.5 font-bold rounded-xl text-sm ${
+                  hasWhatsapp ? 'bg-yellow-400 text-blue-900 hover:bg-yellow-300' : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                } transition-colors`}
                 onClick={() => hasWhatsapp && window.dispatchEvent(new CustomEvent('arcmet:open-whatsapp'))}
                 disabled={!hasWhatsapp}
               >
-                WhatsApp
+                <i className="fab fa-whatsapp mr-2"></i>WhatsApp
               </button>
             </div>
+            )}
           </div>
         </aside>
 
@@ -200,43 +329,7 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
             </div>
           </div>
 
-          {subcategories.length > 0 ? (
-            <div className="mb-8 flex gap-2 overflow-x-auto pb-2">
-              <button
-                onClick={() => {
-                  setSelectedSub('');
-                  const next = new URLSearchParams(searchParams);
-                  next.delete('sub');
-                  setSearchParams(next);
-                }}
-                className={`flex-shrink-0 px-4 py-2 rounded-2xl font-bold text-sm transition-all border ${
-                  !selectedSub
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-blue-900 border-gray-200 hover:bg-blue-50'
-                }`}
-              >
-                Все
-              </button>
-              {subcategories.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => {
-                    setSelectedSub(s);
-                    const next = new URLSearchParams(searchParams);
-                    next.set('sub', s);
-                    setSearchParams(next);
-                  }}
-                  className={`flex-shrink-0 px-4 py-2 rounded-2xl font-bold text-sm transition-all border ${
-                    selectedSub === s
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-blue-900 border-gray-200 hover:bg-blue-50'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          ) : null}
+
 
           {filteredProducts.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
@@ -248,6 +341,7 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                     setSelectedProduct(product);
                     setSelectedProductImageIndex(0);
                     setIsZoomed(false);
+                    setModalTab('description');
                   }}
                 >
                   <div className="h-56 bg-gray-100 relative flex items-center justify-center overflow-hidden">
@@ -304,7 +398,10 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                   </div>
 
                   <div className="p-6">
-                    <h3 className="text-lg font-bold text-blue-900 mb-4 line-clamp-2 h-14">{product.name}</h3>
+                    <h3 className="text-lg font-bold text-blue-900 mb-1 line-clamp-2">{product.name}</h3>
+                    {product.sku ? (
+                      <p className="text-[10px] text-gray-400 font-medium mb-3">Арт: {product.sku}</p>
+                    ) : <div className="mb-3" />}
 
                     <div className="space-y-2 mb-6">
                       {Object.entries(product.attrs)
@@ -478,11 +575,11 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                   {selectedProduct.name}
                 </h2>
 
-                {/* SKU & Stock Status */}
+                {/* Артикул & Stock Status */}
                 <div className="flex items-center gap-3 mb-4">
                   {selectedProduct.sku ? (
                     <span className="text-xs text-gray-500 font-medium">
-                      SKU: <span className="font-bold text-gray-700">{selectedProduct.sku}</span>
+                      Артикул: <span className="font-bold text-gray-700">{selectedProduct.sku}</span>
                     </span>
                   ) : null}
                   <div className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full ${
@@ -495,15 +592,8 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                   </div>
                 </div>
 
-                {/* Description */}
-                {selectedProduct.description ? (
-                  <p className="text-gray-600 mb-5 leading-relaxed text-sm">
-                    {selectedProduct.description}
-                  </p>
-                ) : null}
-
-                {/* Price Section - EMPHASIS */}
-                <div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-2xl p-5 mb-6 shadow-lg">
+                {/* Price Section */}
+                <div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-2xl p-5 mb-5 shadow-lg">
                   <div className="text-xs font-bold opacity-90 mb-1.5 uppercase tracking-wider">
                     <i className="fas fa-tag mr-1.5"></i>Цена за {selectedProduct.unit}
                   </div>
@@ -517,27 +607,63 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                   )}
                 </div>
 
-                {/* Specs as Grid */}
-                {Object.keys(selectedProduct.attrs).length > 0 ? (
+                {/* Tabs: Описание | Характеристики */}
+                {(selectedProduct.description || Object.keys(selectedProduct.attrs).length > 0) ? (
                   <div className="mb-6">
-                    <h3 className="text-xs font-black text-gray-900 uppercase tracking-wider mb-3 flex items-center gap-2">
-                      <i className="fas fa-list text-blue-600"></i>Характеристики
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {Object.entries(selectedProduct.attrs)
-                        .slice(0, 6)
-                        .map(([key, val]) => (
+                    <div className="flex gap-0 border-b border-gray-200 mb-4">
+                      <button
+                        onClick={() => setModalTab('description')}
+                        className={`px-4 py-2 text-sm font-bold border-b-2 transition-all -mb-px ${
+                          modalTab === 'description'
+                            ? 'border-blue-600 text-blue-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        Описание
+                      </button>
+                      {Object.keys(selectedProduct.attrs).length > 0 ? (
+                        <button
+                          onClick={() => setModalTab('specs')}
+                          className={`px-4 py-2 text-sm font-bold border-b-2 transition-all -mb-px ${
+                            modalTab === 'specs'
+                              ? 'border-blue-600 text-blue-600'
+                              : 'border-transparent text-gray-500 hover:text-gray-700'
+                          }`}
+                        >
+                          Характеристики
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {modalTab === 'description' ? (
+                      <div>
+                        {selectedProduct.description ? (
+                          <p className="text-gray-600 leading-relaxed text-sm">{selectedProduct.description}</p>
+                        ) : (
+                          <p className="text-gray-400 text-sm italic">Описание не добавлено</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {selectedProduct.sku ? (
+                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 hover:border-blue-300 hover:bg-blue-50 transition-all sm:col-span-2">
+                            <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">Артикул</div>
+                            <div className="text-sm font-bold text-gray-900">{selectedProduct.sku}</div>
+                          </div>
+                        ) : null}
+                        {Object.entries(selectedProduct.attrs).map(([key, val]) => (
                           <div
                             key={key}
                             className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 hover:border-blue-300 hover:bg-blue-50 transition-all"
                           >
                             <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">
-                              {key.replace(/_/g, ' ')}
+                              {attrLabel(key)}
                             </div>
-                            <div className="text-sm font-bold text-gray-900">{val}</div>
+                            <div className="text-sm font-bold text-gray-900">{String(val)}</div>
                           </div>
                         ))}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 ) : null}
 

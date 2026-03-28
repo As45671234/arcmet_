@@ -1,8 +1,58 @@
 
 import React, { useEffect, useState } from 'react';
-import { Category } from '../types';
-import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage, adminPatchCategory, adminPurgeAll } from '../services/api';
+import { Category, SiteSettings } from '../types';
+import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage, adminPatchCategory, adminPurgeAll, adminGetSiteSettings, adminSaveSiteSettings, adminUploadImage } from '../services/api';
 import { IMPORT_SUPPLIERS } from '../constants';
+
+const DEFAULT_SITE_SETTINGS: SiteSettings = {
+  phone: '+7 775 702 92 98',
+  email: 'ceo@arcmet.kz',
+  address: 'Талапкерская 26а, офис 202',
+  kaspiEnabled: true,
+  kaspiUrl: 'https://kaspi.kz/shop/info/merchant/17410012/reviews/?productCode=136545715&masterSku=136545715&merchantSku=424870474&tabId=PRODUCT',
+  halykEnabled: true,
+  halykUrl: 'https://halykbank.kz/',
+  heroSlides: [
+    {
+      title: 'Теплоизоляционные системы',
+      subtitle: 'ПРИОРИТЕТНОГО УРОВНЯ',
+      desc: 'Профессиональные решения для объектов любой сложности. Гарантия качества от ведущих производителей.',
+      img: 'https://hidropro.ru/upload/dev2fun.imagecompress/webp/img/2-kak-vyglyadet-gidroizolyaciya-fundamenta.webp',
+    },
+    {
+      title: 'Инновационная гидроизоляция',
+      subtitle: 'НАДЕЖНОСТЬ И ДОЛГОВЕЧНОСТЬ',
+      desc: 'Полимерные мембраны нового поколения. Идеальная защита от влаги на 50+ лет.',
+      img: 'https://ir.ozone.ru/s3/multimedia-o/6775911780.jpg',
+    },
+  ],
+  aboutSlides: [
+    {
+      title: 'ARCMET — комплексные поставки',
+      text: 'Мы помогаем быстро укомплектовать объект современными строительными материалами: от гидроизоляции до фасадных решений.',
+      imageUrl: '/about/postavka.jpg',
+      bullets: ['Прямые поставки от производителей', 'Стабильные складские позиции', 'Поддержка на каждом этапе'],
+    },
+    {
+      title: 'Консультации и подбор решений',
+      text: 'Подбираем материалы под задачу, бюджет и сроки. Даем технические рекомендации и помогаем избежать ошибок на объекте.',
+      imageUrl: '/about/consultation.jpg',
+      bullets: ['Анализ проекта', 'Подбор аналогов', 'Экономия времени и бюджета'],
+    },
+    {
+      title: 'Контроль качества и логистика',
+      text: 'Отгружаем только проверенную продукцию и выстраиваем удобную доставку по городу и регионам.',
+      imageUrl: '/about/control.jpg',
+      bullets: ['Проверка партий', 'Гибкие условия доставки', 'Прозрачные документы'],
+    },
+    {
+      title: 'Партнерство на годы',
+      text: 'Строим долгосрочные отношения с клиентами и подрядчиками, чтобы проекты двигались без простоев.',
+      imageUrl: '/about/partner.jpg',
+      bullets: ['Личный менеджер', 'Оперативные ответы', 'Поддержка сложных проектов'],
+    },
+  ],
+};
 
 interface AdminDashboardProps {
   categories: Category[];
@@ -11,7 +61,7 @@ interface AdminDashboardProps {
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'inventory' | 'import' | 'orders' | 'leads' | 'categories'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'import' | 'orders' | 'leads' | 'categories' | 'constructor'>('inventory');
   const [isImporting, setIsImporting] = useState(false);
   const [isPurgingAll, setIsPurgingAll] = useState(false);
   const [selectedImportSupplier, setSelectedImportSupplier] = useState<string>('');
@@ -87,6 +137,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
   const [categoryImageUploading, setCategoryImageUploading] = useState<Record<string, boolean>>({});
   const [categoryImageSaving, setCategoryImageSaving] = useState<Record<string, boolean>>({});
   const [categoryImageDrafts, setCategoryImageDrafts] = useState<Record<string, string>>({});
+  const [constructorLoading, setConstructorLoading] = useState(false);
+  const [constructorSaving, setConstructorSaving] = useState(false);
+  const [siteForm, setSiteForm] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
 
   // Orders
   const [orders, setOrders] = useState<any[]>([]);
@@ -220,9 +273,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
     await Promise.allSettled([refreshAdmin(), refreshPublic()]);
   };
 
+  const loadSiteSettings = async () => {
+    if (!token) return;
+    setConstructorLoading(true);
+    try {
+      const data = await adminGetSiteSettings(token);
+      const s = data?.settings || {};
+      setSiteForm({
+        ...DEFAULT_SITE_SETTINGS,
+        ...s,
+        heroSlides: Array.isArray(s.heroSlides) && s.heroSlides.length > 0 ? s.heroSlides : DEFAULT_SITE_SETTINGS.heroSlides,
+        aboutSlides: Array.isArray(s.aboutSlides) && s.aboutSlides.length > 0 ? s.aboutSlides : DEFAULT_SITE_SETTINGS.aboutSlides,
+      });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setConstructorLoading(false);
+    }
+  };
+
   useEffect(() => {
     refreshAll();
+    loadSiteSettings();
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'constructor') return;
+    loadSiteSettings();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
 useEffect(() => {
     if (activeTab !== 'orders') return;
@@ -307,6 +386,37 @@ useEffect(() => {
       alert(error?.message || 'Ошибка полного удаления базы');
     } finally {
       setIsPurgingAll(false);
+    }
+  };
+
+  const saveSiteConstructor = async () => {
+    if (!token) return;
+    setConstructorSaving(true);
+    try {
+      const payload = {
+        ...siteForm,
+        heroSlides: (siteForm.heroSlides || []).map((s) => ({
+          title: String(s.title || '').trim(),
+          subtitle: String(s.subtitle || '').trim(),
+          desc: String(s.desc || '').trim(),
+          img: String(s.img || '').trim(),
+        })),
+        aboutSlides: (siteForm.aboutSlides || []).map((s) => ({
+          title: String(s.title || '').trim(),
+          text: String(s.text || '').trim(),
+          imageUrl: String(s.imageUrl || '').trim(),
+          bullets: Array.isArray(s.bullets)
+            ? s.bullets.map((b) => String(b || '').trim()).filter(Boolean)
+            : [],
+        })),
+      };
+      await adminSaveSiteSettings(token, payload);
+      alert('Конструктор главной страницы сохранен');
+    } catch (error: any) {
+      console.error(error);
+      alert(error?.message || 'Ошибка при сохранении конструктора');
+    } finally {
+      setConstructorSaving(false);
     }
   };
 
@@ -685,6 +795,12 @@ useEffect(() => {
           className={`px-8 py-4 rounded-2xl font-bold transition-all uppercase text-xs tracking-widest ${activeTab === 'categories' ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'bg-white text-gray-400 hover:bg-blue-50'}`}
         >
           <i className="fas fa-images mr-2"></i> Категории
+        </button>
+        <button
+          onClick={() => setActiveTab('constructor')}
+          className={`px-8 py-4 rounded-2xl font-bold transition-all uppercase text-xs tracking-widest ${activeTab === 'constructor' ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'bg-white text-gray-400 hover:bg-blue-50'}`}
+        >
+          <i className="fas fa-pen-ruler mr-2"></i> Конструктор главной
         </button>
       </div>
 
@@ -1306,6 +1422,286 @@ useEffect(() => {
                   );
                 })}
               </div>
+            )}
+          </div>
+        ) : activeTab === 'constructor' ? (
+          <div className="p-10 space-y-8">
+            <div className="flex flex-col lg:flex-row lg:items-end gap-4 justify-between">
+              <div>
+                <h3 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Конструктор главной страницы</h3>
+                <p className="text-gray-500 text-sm mt-1">Изменяйте тексты, ссылки и изображения без правки кода</p>
+              </div>
+              <button
+                onClick={saveSiteConstructor}
+                disabled={constructorSaving || constructorLoading}
+                className={`px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs ${constructorSaving || constructorLoading ? 'bg-gray-100 text-gray-400' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700'}`}
+              >
+                {constructorSaving ? 'Сохранение...' : 'Сохранить изменения'}
+              </button>
+            </div>
+
+            {constructorLoading ? (
+              <div className="p-16 text-center text-gray-500">Загрузка настроек...</div>
+            ) : (
+              <>
+                <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100">
+                  <h4 className="text-lg font-black text-blue-900 mb-4 uppercase tracking-wider">Контакты в Header и блоке контактов</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <input
+                      className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                      value={siteForm.phone || ''}
+                      onChange={(e) => setSiteForm((prev) => ({ ...prev, phone: e.target.value }))}
+                      placeholder="Телефон"
+                    />
+                    <input
+                      className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                      value={siteForm.email || ''}
+                      onChange={(e) => setSiteForm((prev) => ({ ...prev, email: e.target.value }))}
+                      placeholder="Email"
+                    />
+                    <input
+                      className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                      value={siteForm.address || ''}
+                      onChange={(e) => setSiteForm((prev) => ({ ...prev, address: e.target.value }))}
+                      placeholder="Адрес"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100">
+                  <h4 className="text-lg font-black text-blue-900 mb-4 uppercase tracking-wider">Кнопки рассрочки (Kaspi / Halyk)</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3">
+                      <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={!!siteForm.kaspiEnabled}
+                          onChange={(e) => setSiteForm((prev) => ({ ...prev, kaspiEnabled: e.target.checked }))}
+                        />
+                        Показать кнопку Kaspi
+                      </label>
+                      <input
+                        className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                        value={siteForm.kaspiUrl || ''}
+                        onChange={(e) => setSiteForm((prev) => ({ ...prev, kaspiUrl: e.target.value }))}
+                        placeholder="Ссылка Kaspi"
+                      />
+                    </div>
+                    <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3">
+                      <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={!!siteForm.halykEnabled}
+                          onChange={(e) => setSiteForm((prev) => ({ ...prev, halykEnabled: e.target.checked }))}
+                        />
+                        Показать кнопку Halyk
+                      </label>
+                      <input
+                        className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                        value={siteForm.halykUrl || ''}
+                        onChange={(e) => setSiteForm((prev) => ({ ...prev, halykUrl: e.target.value }))}
+                        placeholder="Ссылка Halyk"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-black text-blue-900 uppercase tracking-wider">Слайды Hero</h4>
+                    <button
+                      type="button"
+                      onClick={() => setSiteForm((prev) => ({
+                        ...prev,
+                        heroSlides: [...(prev.heroSlides || []), { title: '', subtitle: '', desc: '', img: '' }],
+                      }))}
+                      className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-black uppercase tracking-widest"
+                    >
+                      + Добавить слайд
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    {(siteForm.heroSlides || []).map((slide, idx) => (
+                      <div key={`hero-${idx}`} className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm font-black text-gray-700 uppercase">Слайд #{idx + 1}</div>
+                          <button
+                            type="button"
+                            onClick={() => setSiteForm((prev) => ({
+                              ...prev,
+                              heroSlides: (prev.heroSlides || []).filter((_, i) => i !== idx),
+                            }))}
+                            className="text-xs font-bold text-red-500"
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                        <input
+                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                          value={slide.subtitle || ''}
+                          onChange={(e) => setSiteForm((prev) => ({
+                            ...prev,
+                            heroSlides: (prev.heroSlides || []).map((s, i) => i === idx ? { ...s, subtitle: e.target.value } : s),
+                          }))}
+                          placeholder="Подзаголовок"
+                        />
+                        <input
+                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                          value={slide.title || ''}
+                          onChange={(e) => setSiteForm((prev) => ({
+                            ...prev,
+                            heroSlides: (prev.heroSlides || []).map((s, i) => i === idx ? { ...s, title: e.target.value } : s),
+                          }))}
+                          placeholder="Заголовок"
+                        />
+                        <textarea
+                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 min-h-[90px]"
+                          value={slide.desc || ''}
+                          onChange={(e) => setSiteForm((prev) => ({
+                            ...prev,
+                            heroSlides: (prev.heroSlides || []).map((s, i) => i === idx ? { ...s, desc: e.target.value } : s),
+                          }))}
+                          placeholder="Описание"
+                        />
+                        {/* Image preview + upload */}
+                        <div className="flex gap-3 items-start">
+                          {slide.img ? (
+                            <div className="relative flex-shrink-0 w-24 h-20 rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+                              <img
+                                src={slide.img}
+                                alt="preview"
+                                className="w-full h-full object-cover"
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                              />
+                              <button
+                                type="button"
+                                title="Удалить изображение"
+                                onClick={() => setSiteForm((prev) => ({
+                                  ...prev,
+                                  heroSlides: (prev.heroSlides || []).map((s, i) => i === idx ? { ...s, img: '' } : s),
+                                }))}
+                                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center shadow"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex-shrink-0 w-24 h-20 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center text-gray-300 text-2xl">
+                              <i className="fas fa-image"></i>
+                            </div>
+                          )}
+                          <div className="flex-grow space-y-2">
+                            <input
+                              className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm"
+                              value={slide.img || ''}
+                              onChange={(e) => setSiteForm((prev) => ({
+                                ...prev,
+                                heroSlides: (prev.heroSlides || []).map((s, i) => i === idx ? { ...s, img: e.target.value } : s),
+                              }))}
+                              placeholder="URL изображения (или загрузите файл)"
+                            />
+                            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold hover:bg-blue-100 transition-colors">
+                              <i className="fas fa-upload"></i> Загрузить файл
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  try {
+                                    const token = getAdminToken() || '';
+                                    const url = await adminUploadImage(token, file);
+                                    setSiteForm((prev) => ({
+                                      ...prev,
+                                      heroSlides: (prev.heroSlides || []).map((s, i) => i === idx ? { ...s, img: url } : s),
+                                    }));
+                                  } catch {
+                                    alert('Ошибка загрузки изображения');
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-black text-blue-900 uppercase tracking-wider">Слайды блока О компании</h4>
+                    <button
+                      type="button"
+                      onClick={() => setSiteForm((prev) => ({
+                        ...prev,
+                        aboutSlides: [...(prev.aboutSlides || []), { title: '', text: '', imageUrl: '', bullets: [] }],
+                      }))}
+                      className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-black uppercase tracking-widest"
+                    >
+                      + Добавить слайд
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    {(siteForm.aboutSlides || []).map((slide, idx) => (
+                      <div key={`about-${idx}`} className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm font-black text-gray-700 uppercase">Слайд #{idx + 1}</div>
+                          <button
+                            type="button"
+                            onClick={() => setSiteForm((prev) => ({
+                              ...prev,
+                              aboutSlides: (prev.aboutSlides || []).filter((_, i) => i !== idx),
+                            }))}
+                            className="text-xs font-bold text-red-500"
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                        <input
+                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                          value={slide.title || ''}
+                          onChange={(e) => setSiteForm((prev) => ({
+                            ...prev,
+                            aboutSlides: (prev.aboutSlides || []).map((s, i) => i === idx ? { ...s, title: e.target.value } : s),
+                          }))}
+                          placeholder="Заголовок"
+                        />
+                        <textarea
+                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 min-h-[90px]"
+                          value={slide.text || ''}
+                          onChange={(e) => setSiteForm((prev) => ({
+                            ...prev,
+                            aboutSlides: (prev.aboutSlides || []).map((s, i) => i === idx ? { ...s, text: e.target.value } : s),
+                          }))}
+                          placeholder="Текст"
+                        />
+                        <input
+                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                          value={slide.imageUrl || ''}
+                          onChange={(e) => setSiteForm((prev) => ({
+                            ...prev,
+                            aboutSlides: (prev.aboutSlides || []).map((s, i) => i === idx ? { ...s, imageUrl: e.target.value } : s),
+                          }))}
+                          placeholder="URL изображения"
+                        />
+                        <textarea
+                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 min-h-[90px]"
+                          value={Array.isArray(slide.bullets) ? slide.bullets.join('\n') : ''}
+                          onChange={(e) => setSiteForm((prev) => ({
+                            ...prev,
+                            aboutSlides: (prev.aboutSlides || []).map((s, i) => i === idx
+                              ? { ...s, bullets: e.target.value.split('\n').map((x) => x.trim()).filter(Boolean) }
+                              : s),
+                          }))}
+                          placeholder="Пункты, каждый с новой строки"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
           </div>
         ) : (

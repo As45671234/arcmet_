@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
+import { HeroSlide } from '../types';
 
-const slides = [
+const DEFAULT_SLIDES: (HeroSlide & { color: string })[] = [
   {
     title: "Теплоизоляционные системы",
     subtitle: "ПРИОРИТЕТНОГО УРОВНЯ",
@@ -20,15 +21,24 @@ const slides = [
 
 interface HeroProps {
   onConsultationClick: () => void;
+  slides?: HeroSlide[];
 }
 
-const Hero: React.FC<HeroProps> = ({ onConsultationClick }) => {
+const Hero: React.FC<HeroProps> = ({ onConsultationClick, slides: propSlides }) => {
   const [current, setCurrent] = useState(0);
+
+  const slides = (propSlides && propSlides.length > 0)
+    ? propSlides.map((s, i) => ({ ...s, color: i % 2 === 0 ? 'bg-blue-900/60' : 'bg-gray-900/60' }))
+    : DEFAULT_SLIDES;
+
+  useEffect(() => {
+    setCurrent(0);
+  }, [slides.length]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrent(p => (p + 1) % slides.length), 8000);
     return () => clearInterval(timer);
-  }, []);
+  }, [slides.length]);
 
   return (
     <section className="relative h-[85vh] min-h-[600px] overflow-hidden">

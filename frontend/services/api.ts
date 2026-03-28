@@ -297,3 +297,34 @@ export async function adminPurgeAll(token: string, purgePassword: string) {
     body: JSON.stringify({ confirmText: 'DELETE_ALL', purgePassword }),
   });
 }
+
+export async function fetchSiteSettings() {
+  return request<{ ok: boolean; settings: any }>('/api/site-settings');
+}
+
+export async function adminGetSiteSettings(token: string) {
+  return request<{ ok: boolean; settings: any }>('/api/admin/site-settings', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function adminSaveSiteSettings(token: string, settings: any) {
+  return request<{ ok: boolean; settings: any }>('/api/admin/site-settings', {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(settings),
+  });
+}
+
+export async function adminUploadImage(token: string, file: File): Promise<string> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch('/api/admin/upload/product-image', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!res.ok) throw new Error('Upload failed');
+  const data = await res.json();
+  return data.imageUrl as string;
+}

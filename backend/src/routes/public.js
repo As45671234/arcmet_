@@ -3,6 +3,7 @@ const Product = require("../models/Product");
 const Order = require("../models/Order");
 const Lead = require("../models/Lead");
 const CategoryMeta = require("../models/CategoryMeta");
+const SiteSettings = require("../models/SiteSettings");
 
 function normalizeImageUrl(raw) {
   const v = String(raw || "").trim();
@@ -136,6 +137,12 @@ function publicRoutes(emailLimiter) {
     const order = await createOrderFromPayload(req.body || {});
     if (!order) return res.status(400).json({ error: "invalid order" });
     res.json({ ok: true, id: String(order._id) });
+  });
+
+  // Public site settings (phone, email, address, kaspi/halyk links, hero/about slides)
+  router.get("/site-settings", async (req, res) => {
+    const settings = await SiteSettings.findOne().lean();
+    res.json({ ok: true, settings: settings || {} });
   });
 
   return router;

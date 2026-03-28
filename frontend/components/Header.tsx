@@ -6,9 +6,11 @@ import { Category } from '../types';
 interface HeaderProps {
   cartCount: number;
   categories: Category[];
+  phone?: string;
 }
 
-const Header: React.FC<HeaderProps> = ({ cartCount, categories }) => {
+const Header: React.FC<HeaderProps> = ({ cartCount, categories, phone }) => {
+  const PHONE = phone || '+7 775 702 92 98';
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileCatalogOpen, setMobileCatalogOpen] = useState(false);
@@ -107,6 +109,14 @@ const Header: React.FC<HeaderProps> = ({ cartCount, categories }) => {
         </nav>
 
         <div className="flex items-center gap-4">
+          {/* Phone number */}
+          <a
+            href={`tel:${PHONE.replace(/\s/g, '')}`}
+            className="hidden md:flex items-center gap-2 text-blue-900 font-bold text-sm hover:text-blue-600 transition-colors"
+          >
+            <i className="fas fa-phone text-xs"></i>
+            <span>{PHONE}</span>
+          </a>
           <Link to="/cart" className="relative p-2 text-blue-900 hover:bg-blue-50 rounded-full transition-all">
             <i className="fas fa-shopping-cart text-lg"></i>
             {cartCount > 0 && (
@@ -167,6 +177,14 @@ const Header: React.FC<HeaderProps> = ({ cartCount, categories }) => {
               {link.name}
             </button>
           ))}
+
+          <a
+            href={`tel:${PHONE.replace(/\s/g, '')}`}
+            className="flex items-center gap-3 text-blue-900 font-bold text-lg"
+          >
+            <i className="fas fa-phone"></i>
+            {PHONE}
+          </a>
         </div>
       )}
     </header>

@@ -490,54 +490,77 @@ function normalizeHeader(h) {
 }
 
 function buildHeaderMap(headerRow) {
-  const map = { imageColumns: [] };
+  const knownIndices = new Set();
+  const map = { imageColumns: [], attrColumns: [] };
+
+  const mark = (idx) => { knownIndices.add(idx); return idx; };
+
   for (let i = 0; i < headerRow.length; i++) {
-    const h = normalizeHeader(headerRow[i]);
+    const rawHeader = String(headerRow[i] || "").trim();
+    const h = normalizeHeader(rawHeader);
     if (!h) continue;
 
-    if (h.includes("артикул")) map.sku = i;
+    if (h.includes("артикул")) { map.sku = mark(i); continue; }
     if (
       h === "наименование" ||
       h.includes("наименование материала") ||
       h.includes("наименование") ||
       h.includes("номенклатур")
-    ) map.name = i;
-    if (h.includes("описание")) map.description = i;
-    if (/(^ед\s*изм$)|(^ед\s*изм\s*$)|(^единица\s*измерения$)|(^ед\s*изм\b)/i.test(h)) map.unit = i;
-    if (h.includes("количеств") || h === "остаток") map.quantity = i;
+    ) { map.name = mark(i); continue; }
+    if (h.includes("описание")) { map.description = mark(i); continue; }
+    if (/(^ед\s*изм$)|(^ед\s*изм\s*$)|(^единица\s*измерения$)|(^ед\s*изм\b)/i.test(h)) { map.unit = mark(i); continue; }
+    if (h.includes("количеств") || h === "остаток") { map.quantity = mark(i); continue; }
 
-    if (h.includes("толщина")) map.thickness = i;
-    if (h.includes("размер")) map.size = i;
+    // Subcategory column (новый: "Подкатегория", "Sub", "Группа товара")
+    if (h.includes("подкатегори") || h.includes("sub categ") || h === "subcat" || h === "sub" || h === "группа товара") {
+      map.subcategory = mark(i); continue;
+    }
 
-    if (h.includes("площадь") && h.includes("пачке")) map.pack_area = i;
-    if (h.includes("объем") && h.includes("пачке")) map.pack_volume = i;
-    if (h.includes("площадь") && h.includes("рулоне")) map.roll_area = i;
+    // Characteristics column - format "Ключ: Значение; Ключ2: Значение2"
+    if (h.includes("характеристик") || h === "specs" || h === "attributes") {
+      map.characteristics = mark(i); continue;
+    }
 
-    // some sheets use short units columns for penoplex
-    if (h === "м2" || h === "m2") map.pack_area = map.pack_area !== undefined ? map.pack_area : i;
-    if (h === "м3" || h === "m3") map.pack_volume = map.pack_volume !== undefined ? map.pack_volume : i;
+    if (h.includes("толщина")) { map.thickness = mark(i); continue; }
+    if (h.includes("размер")) { map.size = mark(i); continue; }
 
-    // "Количество в упаковке"
-    if (h.includes("количество") && h.includes("упаков")) map.pack_qty = i;
+    if (h.includes("площадь") && h.includes("пачке")) { map.pack_area = mark(i); continue; }
+    if (h.includes("объем") && h.includes("пачке")) { map.pack_volume = mark(i); continue; }
+    if (h.includes("площадь") && h.includes("рулоне")) { map.roll_area = mark(i); continue; }
 
-    if (h.includes("кратность")) map.pack_qty = i;
-    if (h.includes("маркировка")) map.marking = i;
+    if (h === "м2" || h === "m2") { map.pack_area = map.pack_area !== undefined ? map.pack_area : mark(i); continue; }
+    if (h === "м3" || h === "m3") { map.pack_volume = map.pack_volume !== undefined ? map.pack_volume : mark(i); continue; }
+
+    if (h.includes("количество") && h.includes("упаков")) { map.pack_qty = mark(i); continue; }
+    if (h.includes("кратность")) { map.pack_qty = mark(i); continue; }
+    if (h.includes("маркировка")) { map.marking = mark(i); continue; }
     if (h.includes("изображение") || h.includes("картинк") || h.includes("фото")) {
       const numMatch = h.match(/(\d+)/);
-      if (numMatch) map.imageColumns.push(i);
-      else map.image = i;
+      if (numMatch) map.imageColumns.push(mark(i));
+      else { map.image = mark(i); }
+      continue;
     }
 
     // prices
-    if (h === "цена" || h.includes("цена ")) map.price_any = map.price_any || i;
-    if (h.includes("закупоч")) map.purchase = i;
-    if (h.includes("рекоменд")) map.recommended = i;
-    if (h.includes("цена розниц")) map.retail = i;
-    if (h.includes("цена для клиент")) map.client = i;
-    if (h.includes("интернет-магаз")) map.online = i;
-    if (h.includes("от 5")) map.wholesale_5m = i;
-    if (h.includes("от 1")) map.wholesale_1m = i;
+    if (h === "цена" || h.includes("цена ")) { map.price_any = map.price_any || mark(i); continue; }
+    if (h.includes("закупоч")) { map.purchase = mark(i); continue; }
+    if (h.includes("рекоменд")) { map.recommended = mark(i); continue; }
+    if (h.includes("цена розниц")) { map.retail = mark(i); continue; }
+    if (h.includes("цена для клиент")) { map.client = mark(i); continue; }
+    if (h.includes("интернет-магаз")) { map.online = mark(i); continue; }
+    if (h.includes("от 5")) { map.wholesale_5m = mark(i); continue; }
+    if (h.includes("от 1")) { map.wholesale_1m = mark(i); continue; }
   }
+
+  // Second pass: any non-empty header column not already claimed → generic attribute column
+  for (let i = 0; i < headerRow.length; i++) {
+    const rawHeader = String(headerRow[i] || "").trim();
+    if (!rawHeader || knownIndices.has(i)) continue;
+    const h = normalizeHeader(rawHeader);
+    if (!h) continue;
+    map.attrColumns.push({ index: i, label: rawHeader });
+  }
+
   return map;
 }
 
@@ -765,6 +788,8 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier }) {
       const description = headerMap.description !== undefined ? String(row[headerMap.description] || "").trim() : "";
       const unit = headerMap.unit !== undefined ? String(row[headerMap.unit] || "").trim() : "";
       const stockQty = headerMap.quantity !== undefined ? parseNumber(row[headerMap.quantity]) : undefined;
+      // Subcategory: explicit column beats single-cell group row
+      const subcategoryFromCol = headerMap.subcategory !== undefined ? String(row[headerMap.subcategory] || "").trim() : "";
       const excelRow = r + 1;
 
       const imageColumns = headerMap.imageColumns && headerMap.imageColumns.length
@@ -841,6 +866,30 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier }) {
         if (v) attrs.marking = v;
       }
 
+      // Parse "Характеристики" column: "Ключ: Значение; Ключ2: Значение2"
+      if (headerMap.characteristics !== undefined) {
+        const charStr = String(row[headerMap.characteristics] || "").trim();
+        if (charStr) {
+          // Support both ";" and newline separators
+          const pairs = charStr.split(/[;\n]+/);
+          for (const pair of pairs) {
+            const colonIdx = pair.indexOf(":");
+            if (colonIdx < 1) continue;
+            const key = pair.slice(0, colonIdx).trim();
+            const val = pair.slice(colonIdx + 1).trim();
+            if (key && val) attrs[key] = val;
+          }
+        }
+      }
+
+      // Generic attribute columns: any unclaimed column
+      if (Array.isArray(headerMap.attrColumns)) {
+        for (const { index, label } of headerMap.attrColumns) {
+          const v = String(row[index] || "").trim();
+          if (v && label) attrs[label] = v;
+        }
+      }
+
       const prices = {};
       const retail = headerMap.retail !== undefined ? parseNumber(row[headerMap.retail]) : undefined;
       const recommended = headerMap.recommended !== undefined ? parseNumber(row[headerMap.recommended]) : undefined;
@@ -873,7 +922,8 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier }) {
       const category_title = supplierMeta ? supplierMeta.title : currentCategoryTitle;
       const supplier_id = supplierMeta ? supplierMeta.id : category_id;
       const supplier_title = supplierMeta ? supplierMeta.title : category_title;
-      const brandOrGroup = currentGroup || defaultGroup || "";
+      // Subcategory column overrides single-cell group rows
+      const brandOrGroup = subcategoryFromCol || currentGroup || defaultGroup || "";
       const key = buildProductKey({
         categoryId: category_id,
         supplierId: supplier_id,

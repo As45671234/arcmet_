@@ -71,3 +71,29 @@ export interface AppState {
   cart: CartItem[];
   orders: Order[];
 }
+
+export interface HeroSlide {
+  title: string;
+  subtitle: string;
+  desc: string;
+  img: string;
+}
+
+export interface AboutSlide {
+  title: string;
+  text: string;
+  imageUrl: string;
+  bullets: string[];
+}
+
+export interface SiteSettings {
+  phone: string;
+  email: string;
+  address: string;
+  kaspiEnabled: boolean;
+  kaspiUrl: string;
+  halykEnabled: boolean;
+  halykUrl: string;
+  heroSlides: HeroSlide[];
+  aboutSlides: AboutSlide[];
+}

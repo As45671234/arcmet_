@@ -10,6 +10,7 @@ const Product = require("../models/Product");
 const CategoryMeta = require("../models/CategoryMeta");
 const Order = require("../models/Order");
 const Lead = require("../models/Lead");
+const SiteSettings = require("../models/SiteSettings");
 const { requireAdmin } = require("../middleware/auth");
 const { workbookToProducts } = require("../services/excelImport");
 const { slugify, getImportSupplier, buildProductKey } = require("../utils");
@@ -767,6 +768,32 @@ router.delete("/leads/:id", requireAdmin, async (req, res) => {
   const lead = await Lead.findByIdAndDelete(req.params.id).lean();
   if (!lead) return res.status(404).json({ error: "lead not found" });
   res.json({ ok: true });
+});
+
+// ── Site Settings (Homepage Constructor) ──────────────────────────────────
+router.get("/site-settings", requireAdmin, async (req, res) => {
+  const settings = await SiteSettings.findOne().lean();
+  res.json({ ok: true, settings: settings || {} });
+});
+
+router.put("/site-settings", requireAdmin, async (req, res) => {
+  const patch = req.body || {};
+  const allowed = [
+    "phone", "email", "address",
+    "kaspiEnabled", "kaspiUrl",
+    "halykEnabled", "halykUrl",
+    "heroSlides", "aboutSlides",
+  ];
+  const update = {};
+  for (const key of allowed) {
+    if (patch[key] !== undefined) update[key] = patch[key];
+  }
+  const settings = await SiteSettings.findOneAndUpdate(
+    {},
+    { $set: update },
+    { new: true, upsert: true }
+  ).lean();
+  res.json({ ok: true, settings });
 });
 
 module.exports = router;

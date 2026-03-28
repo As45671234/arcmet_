@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { HashRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import { Category, CartItem, Product } from './types';
+import { Category, CartItem, Product, SiteSettings } from './types';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
@@ -8,7 +8,7 @@ import CatalogPage from './pages/CatalogPage';
 import CartPage from './pages/CartPage';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminLogin from './pages/AdminLogin';
-import { fetchCatalog, getAdminToken, clearAdminToken } from './services/api';
+import { fetchCatalog, fetchSiteSettings, getAdminToken, clearAdminToken } from './services/api';
 
 type ToastState = { msg: string; id: number; open: boolean } | null;
 
@@ -24,6 +24,7 @@ const App: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
 
   const [toast, setToast] = useState<ToastState>(null);
   const [toastTimer, setToastTimer] = useState<number | null>(null);
@@ -69,6 +70,13 @@ const App: React.FC = () => {
     fetchCatalog()
       .then((data) => setCategories((data.categories || []) as any))
       .catch(() => setCategories([]));
+  }, []);
+
+  // Site settings
+  useEffect(() => {
+    fetchSiteSettings()
+      .then((data) => { if (data?.settings) setSiteSettings(data.settings as SiteSettings); })
+      .catch(() => {});
   }, []);
 
   // Admin session (token)
@@ -130,6 +138,7 @@ const App: React.FC = () => {
         <Header
           cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
           categories={categories}
+          phone={siteSettings?.phone}
         />
 
         {toast && (
@@ -148,7 +157,7 @@ const App: React.FC = () => {
 
         <main className="flex-grow pt-24 md:pt-32">
           <Routes>
-            <Route path="/" element={<HomePage categories={categories} onAddToCart={addToCart} />} />
+            <Route path="/" element={<HomePage categories={categories} onAddToCart={addToCart} siteSettings={siteSettings} />} />
             <Route
               path="/catalog"
               element={<CatalogPage categories={categories} onAddToCart={addToCart} />}
@@ -184,7 +193,7 @@ const App: React.FC = () => {
           </Routes>
         </main>
 
-        <Footer />
+        <Footer siteSettings={siteSettings} />
       </div>
       {whatsappUrl ? (
         <a

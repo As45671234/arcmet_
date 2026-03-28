@@ -5,7 +5,7 @@ import Hero from '../components/Hero';
 import LeadForm from '../components/LeadForm';
 import PartnersSection from "../components/PartnersSection";
 import AboutSlider from "../components/InfographicSection";
-import { Category, Product } from '../types';
+import { Category, Product, SiteSettings } from '../types';
 import { CATEGORY_IMAGES, DEFAULT_CATEGORY_IMAGE } from '../constants';
 import { Link } from 'react-router-dom';
 import penoplexProduct01 from '../components/img/company/penoplex-product-01.jpg';
@@ -18,6 +18,7 @@ import brandAkfa from '../components/img/company/brand-akfa.jpg';
 interface HomePageProps {
   categories: Category[];
   onAddToCart: (p: Product) => void;
+  siteSettings?: SiteSettings | null;
 }
 
 const LOCAL_CATEGORY_IMAGES: Record<string, string> = {
@@ -130,7 +131,7 @@ const DEFAULT_PRODUCT_SLIDES = [
   },
 ];
 
-const HomePage: React.FC<HomePageProps> = ({ categories }) => {
+const HomePage: React.FC<HomePageProps> = ({ categories, siteSettings }) => {
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [activeProductIndex, setActiveProductIndex] = useState(0);
   const catalogTrackRef = useRef<HTMLDivElement | null>(null);
@@ -177,6 +178,10 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
   const activeSlide =
     productSlides[safeActiveProductIndex] ||
     DEFAULT_PRODUCT_SLIDES[0];
+
+  const contactPhone = siteSettings?.phone || '+7 775 702 92 98';
+  const contactEmail = siteSettings?.email || 'ceo@arcmet.kz';
+  const contactAddress = siteSettings?.address || 'Талапкерская 26а, офис 202';
 
 
   const leadModal = isLeadModalOpen ? (
@@ -323,9 +328,9 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
 
   return (
     <div className="animate-fade-up">
-      <Hero onConsultationClick={() => setIsLeadModalOpen(true)} />
-      
-      <AboutSlider />
+      <Hero onConsultationClick={() => setIsLeadModalOpen(true)} slides={siteSettings?.heroSlides} />
+
+      <AboutSlider slides={siteSettings?.aboutSlides?.length ? siteSettings.aboutSlides : undefined} />
 
       {/* Catalog Preview */}
       <section className="py-24 bg-gray-50 overflow-hidden" id="catalog">
@@ -478,7 +483,7 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
                   </div>
                   <div>
                     <div className="text-blue-300 text-xs font-bold uppercase mb-1">Телефон</div>
-                    <a href="tel:+77077978533" className="text-xl font-bold">+7 707 797 85 33</a>
+                    <a href={`tel:${contactPhone.replace(/\s/g, '')}`} className="text-xl font-bold">{contactPhone}</a>
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
@@ -487,7 +492,7 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
                   </div>
                   <div>
                     <div className="text-blue-300 text-xs font-bold uppercase mb-1">Email</div>
-                    <a href="mailto:ceo@arcmet.kz" className="text-xl font-bold">ceo@arcmet.kz</a>
+                    <a href={`mailto:${contactEmail}`} className="text-xl font-bold">{contactEmail}</a>
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
@@ -496,7 +501,7 @@ const HomePage: React.FC<HomePageProps> = ({ categories }) => {
                   </div>
                   <div>
                     <div className="text-blue-300 text-xs font-bold uppercase mb-1">Адрес</div>
-                    <span className="text-xl font-bold">Талапкерская 26а, офис 202</span>
+                    <span className="text-xl font-bold">{contactAddress}</span>
                   </div>
                 </div>
               </div>
