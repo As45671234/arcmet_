@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { HeroSlide } from '../types';
 
 const DEFAULT_SLIDES: (HeroSlide & { color: string })[] = [
@@ -68,6 +69,12 @@ const Hero: React.FC<HeroProps> = ({ onConsultationClick, slides: propSlides }) 
                   >
                     Заказать консультацию
                   </button>
+                  <Link
+                    to="/catalog"
+                    className="px-8 py-4 bg-white/15 hover:bg-white/25 text-white font-bold rounded-lg transition-all transform hover:-translate-y-1 shadow-lg uppercase text-sm tracking-wider border border-white/40 backdrop-blur-sm"
+                  >
+                    Наши товары
+                  </Link>
                 </div>
               </div>
             </div>

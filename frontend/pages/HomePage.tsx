@@ -129,6 +129,7 @@ const DEFAULT_PRODUCT_SLIDES = [
 
 const HomePage: React.FC<HomePageProps> = ({ categories, siteSettings }) => {
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
+  const [isLeadSuccessOpen, setIsLeadSuccessOpen] = useState(false);
   const [activeProductIndex, setActiveProductIndex] = useState(0);
   const catalogTrackRef = useRef<HTMLDivElement | null>(null);
   const wheelLockRef = useRef(false);
@@ -211,21 +212,48 @@ const HomePage: React.FC<HomePageProps> = ({ categories, siteSettings }) => {
         <LeadForm
           onSuccess={() => {
             setIsLeadModalOpen(false);
-            alert('Заявка отправлена!');
+            setIsLeadSuccessOpen(true);
           }}
         />
       </div>
     </div>
   ) : null;
 
+  const leadSuccessModal = isLeadSuccessOpen ? (
+    <div
+      className="fixed inset-0 z-[9999] bg-black/55 flex items-center justify-center p-4"
+      onClick={() => setIsLeadSuccessOpen(false)}
+    >
+      <div
+        className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-gray-100 p-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-14 h-14 rounded-2xl bg-green-50 text-green-600 flex items-center justify-center text-2xl mb-5">
+          <i className="fas fa-check"></i>
+        </div>
+        <h3 className="text-2xl font-black text-blue-900 uppercase tracking-tighter mb-2">Заявка отправлена</h3>
+        <p className="text-gray-500 mb-7">Спасибо! Мы получили вашу заявку и свяжемся с вами в ближайшее время.</p>
+        <button
+          type="button"
+          onClick={() => setIsLeadSuccessOpen(false)}
+          className="w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs bg-blue-600 text-white shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all"
+        >
+          Отлично
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   useEffect(() => {
-    if (!isLeadModalOpen) return;
+    if (!isLeadModalOpen && !isLeadSuccessOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsLeadModalOpen(false);
+      if (e.key !== 'Escape') return;
+      if (isLeadSuccessOpen) setIsLeadSuccessOpen(false);
+      else setIsLeadModalOpen(false);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isLeadModalOpen]);
+  }, [isLeadModalOpen, isLeadSuccessOpen]);
 
   useEffect(() => {
     if (productSlides.length === 0) {
@@ -535,6 +563,7 @@ const HomePage: React.FC<HomePageProps> = ({ categories, siteSettings }) => {
       </section>
 
       {typeof document !== 'undefined' && leadModal ? createPortal(leadModal, document.body) : null}
+      {typeof document !== 'undefined' && leadSuccessModal ? createPortal(leadSuccessModal, document.body) : null}
     </div>
   );
 };
