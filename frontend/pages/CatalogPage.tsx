@@ -677,22 +677,17 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                         )}
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="border-t border-gray-200">
                         {selectedProduct.sku ? (
-                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 hover:border-blue-300 hover:bg-blue-50 transition-all sm:col-span-2">
-                            <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">Артикул</div>
-                            <div className="text-sm font-bold text-gray-900">{selectedProduct.sku}</div>
+                          <div className="grid grid-cols-2 gap-6 py-3 border-b border-gray-200 text-sm">
+                            <div className="text-gray-600">Артикул</div>
+                            <div className="text-gray-900 font-semibold break-words">{selectedProduct.sku}</div>
                           </div>
                         ) : null}
                         {normalizeAttrEntries((selectedProduct.attrs || {}) as Record<string, any>).map(([key, val], idx) => (
-                          <div
-                            key={`${key}-${idx}`}
-                            className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 hover:border-blue-300 hover:bg-blue-50 transition-all"
-                          >
-                            <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">
-                              {key}
-                            </div>
-                            <div className="text-sm font-bold text-gray-900 break-words leading-5">{val}</div>
+                          <div key={`${key}-${idx}`} className="grid grid-cols-2 gap-6 py-3 border-b border-gray-200 text-sm">
+                            <div className="text-gray-600 break-words">{key}</div>
+                            <div className="text-gray-900 font-medium break-words">{val}</div>
                           </div>
                         ))}
                       </div>

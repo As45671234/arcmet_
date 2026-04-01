@@ -465,9 +465,11 @@ router.post("/products", requireAdmin, async (req, res) => {
 
   const category_id = slugify(category_title);
   const sku = String(body.sku || "").trim();
+  const supplier_id = String(body.supplier_id || category_id).trim() || category_id;
+  const supplier_title = String(body.supplier_title || category_title).trim() || category_title;
   const key = buildProductKey({
     categoryId: category_id,
-    supplierId: body.supplier_id || category_id,
+    supplierId: supplier_id,
     sku,
     brandOrGroup: body.brandOrGroup || "",
     name,
@@ -475,12 +477,12 @@ router.post("/products", requireAdmin, async (req, res) => {
     size: body.attrs?.roll_size_mm || ""
   });
 
-  const created = await Product.create({
+  const payload = {
     key,
     category_id,
     category_title,
-    supplier_id: String(body.supplier_id || category_id),
-    supplier_title: String(body.supplier_title || category_title),
+    supplier_id,
+    supplier_title,
     name,
     brandOrGroup: String(body.brandOrGroup || ""),
     unit: String(body.unit || "шт"),
@@ -493,7 +495,42 @@ router.post("/products", requireAdmin, async (req, res) => {
     attrs: body.attrs || {},
     inStock: body.inStock !== undefined ? !!body.inStock : true,
     active: true
-  });
+  };
+
+  if (sku) {
+    const existing = await Product.findOne({
+      sku,
+      $or: [
+        { supplier_id },
+        { category_id }
+      ]
+    });
+
+    if (existing) {
+      existing.key = key;
+      existing.category_id = payload.category_id;
+      existing.category_title = payload.category_title;
+      existing.supplier_id = payload.supplier_id;
+      existing.supplier_title = payload.supplier_title;
+      existing.name = payload.name;
+      existing.brandOrGroup = payload.brandOrGroup;
+      existing.unit = payload.unit;
+      existing.sku = payload.sku;
+      existing.image = payload.image;
+      existing.images = payload.images;
+      existing.description = payload.description;
+      existing.stockQty = payload.stockQty;
+      existing.prices = payload.prices;
+      existing.attrs = payload.attrs;
+      existing.inStock = payload.inStock;
+      existing.active = true;
+
+      await existing.save();
+      return res.json({ product: existing.toJSON(), updated: true });
+    }
+  }
+
+  const created = await Product.create(payload);
 
   res.json({ product: created.toJSON() });
 });

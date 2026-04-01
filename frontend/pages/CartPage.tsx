@@ -41,12 +41,19 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
     e.preventDefault();
     if (cart.length === 0) return;
 
+    const phone = String(customerPhone || '').trim();
+    const email = String(customerEmail || '').trim();
+    if (!phone || !email) {
+      setOrderError('Укажите телефон и email перед отправкой заказа.');
+      return;
+    }
+
     setIsOrdering(true);
     try {
       await sendOrder({
         customerName,
-        customerPhone,
-        customerEmail,
+        customerPhone: phone,
+        customerEmail: email,
         address,
         comment,
         deliveryMethod,
@@ -69,7 +76,8 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
         navigate('/');
       }, 3000);
     } catch (e: any) {
-      setOrderError(e?.message || 'Ошибка при отправке заказа');
+      const msg = String(e?.message || '').trim();
+      setOrderError(msg === 'invalid order' ? 'Проверьте телефон, email и товары в корзине.' : (msg || 'Ошибка при отправке заказа'));
     } finally {
       setIsOrdering(false);
     }
@@ -216,7 +224,7 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
       {isCheckoutStarted && (
         <div className="mt-8 sm:mt-10 bg-white border border-gray-100 rounded-3xl sm:rounded-[36px] shadow-sm p-5 sm:p-8 lg:p-10">
           <h2 className="text-xl sm:text-2xl font-black text-blue-900 uppercase tracking-tighter mb-5 sm:mb-6">Данные для оформления</h2>
-          <form id="checkout-form" onSubmit={handleOrder} noValidate className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+          <form id="checkout-form" onSubmit={handleOrder} className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
             <div className="space-y-6">
               <div className="rounded-3xl border border-gray-100 p-5 bg-gray-50">
                 <h4 className="text-sm font-black text-blue-900 uppercase tracking-widest mb-3">Способ доставки</h4>
