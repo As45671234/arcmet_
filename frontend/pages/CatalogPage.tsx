@@ -84,14 +84,27 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
   };
 
   const activeCategory = categories.find((c) => c.id === selectedCatId);
+  const q = searchQuery.trim().toLowerCase();
+
+  const formatAttrsInline = (attrs: Record<string, any> = {}, limit = 3) =>
+    Object.entries(attrs)
+      .filter(([, val]) => val !== undefined && val !== null && String(val).trim() !== '')
+      .slice(0, limit)
+      .map(([key, val]) => `${attrLabel(key)}: ${String(val).trim()}`)
+      .join(', ');
 
   const filteredProducts =
     activeCategory?.items
-      .filter(
-        (p) =>
-          p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (p.brandOrGroup || '').toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      .filter((p) => {
+        if (!q) return true;
+        const attrsInline = formatAttrsInline((p.attrs || {}) as Record<string, any>, 10).toLowerCase();
+        return (
+          p.name.toLowerCase().includes(q) ||
+          (p.brandOrGroup || '').toLowerCase().includes(q) ||
+          (p.sku || '').toLowerCase().includes(q) ||
+          attrsInline.includes(q)
+        );
+      })
       .filter((p) => !selectedSub || (p.brandOrGroup || '').trim() === selectedSub) || [];
 
   const getProductImages = (product: Product) => {
@@ -321,7 +334,7 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
               <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
               <input
                 type="text"
-                placeholder="Поиск по названию или бренду..."
+                placeholder="Поиск по названию, бренду, артикулу..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-white border border-gray-200 rounded-2xl pl-12 pr-4 py-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
@@ -403,15 +416,8 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                       <p className="text-[10px] text-gray-400 font-medium mb-3">Арт: {product.sku}</p>
                     ) : <div className="mb-3" />}
 
-                    <div className="space-y-2 mb-6">
-                      {Object.entries(product.attrs)
-                        .slice(0, 3)
-                        .map(([key, val]) => (
-                          <div key={key} className="flex items-center justify-between text-xs">
-                            <span className="text-gray-400 capitalize">{key.replace(/_/g, ' ')}</span>
-                            <span className="font-bold text-gray-700">{val}</span>
-                          </div>
-                        ))}
+                    <div className="mb-6 min-h-[40px] text-xs text-gray-500 leading-relaxed">
+                      {formatAttrsInline((product.attrs || {}) as Record<string, any>) || 'Характеристики уточняйте у менеджера'}
                     </div>
 
                     <div className="flex items-center justify-between mt-auto pt-6 border-t border-gray-50">
