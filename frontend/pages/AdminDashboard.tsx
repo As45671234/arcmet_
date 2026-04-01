@@ -2307,24 +2307,35 @@ useEffect(() => {
                     placeholder="Описание товара"
                   />
                 </div>
+
+                <div className="flex items-end">
+                  <label className="inline-flex items-center gap-3 px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold text-gray-600 select-none">
+                    <input
+                      type="checkbox"
+                      checked={editForm.inStock}
+                      onChange={(e) => setEditForm({ ...editForm, inStock: e.target.checked })}
+                    />
+                    В наличии
+                  </label>
+                </div>
               </div>
 
               <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="rounded-3xl border border-gray-100 p-6">
-                  <div className="text-xs font-black uppercase tracking-widest text-blue-900 mb-5">Цены</div>
+                <div className="bg-gray-50/60 border border-gray-100 rounded-[28px] p-6">
+                  <div className="text-sm font-black text-blue-900 uppercase tracking-widest mb-5">Цены</div>
                   <div>
-                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Розница</div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Розница (₸)</div>
                     <input
                       className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
                       value={editForm.prices.retail}
                       onChange={(e) => setEditForm({ ...editForm, prices: { ...editForm.prices, retail: e.target.value } })}
-                      placeholder=""
+                      placeholder="0"
                     />
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-gray-100 p-6">
-                  <div className="text-xs font-black uppercase tracking-widest text-blue-900 mb-5">Характеристики (формат Excel)</div>
+                <div className="bg-gray-50/60 border border-gray-100 rounded-[28px] p-6">
+                  <div className="text-sm font-black text-blue-900 uppercase tracking-widest mb-5">Характеристики (формат Excel)</div>
                   <div className="text-xs text-gray-500 mb-3">Введите строкой: Название: значение, Название: значение, ...</div>
                   <textarea
                     className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm min-h-[160px]"
@@ -2332,17 +2343,6 @@ useEffect(() => {
                     onChange={(e) => setEditForm({ ...editForm, attrsText: e.target.value })}
                     placeholder="Монтажный диаметр мм: 110, Высота выпуска мм: 470, Серия: A110Y"
                   />
-
-                  <div className="mt-6 flex items-center justify-between rounded-2xl bg-gray-50 p-4">
-                    <div className="text-sm font-bold text-blue-900">Наличие</div>
-                    <button
-                      type="button"
-                      onClick={() => setEditForm({ ...editForm, inStock: !editForm.inStock })}
-                      className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${editForm.inStock ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}
-                    >
-                      {editForm.inStock ? 'В наличии' : 'Нет в наличии'}
-                    </button>
-                  </div>
                 </div>
               </div>
 
