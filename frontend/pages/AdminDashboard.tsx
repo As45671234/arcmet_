@@ -119,22 +119,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
     description: '',
     prices: {
       retail: '',
-      purchase: '',
-      recommended: '',
-      client: '',
-      online: '',
-      wholesale_5m: '',
-      wholesale_1m: '',
     },
-    attrs: {
-      thickness_mm: '',
-      roll_size_mm: '',
-      pack_area_m2: '',
-      pack_volume_m3: '',
-      roll_area_m2: '',
-      pack_qty: '',
-      marking: '',
-    },
+    attrsText: '',
     inStock: true,
   });
 
@@ -149,22 +135,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
     description: '',
     prices: {
       retail: '',
-      purchase: '',
-      recommended: '',
-      client: '',
-      online: '',
-      wholesale_5m: '',
-      wholesale_1m: '',
     },
-    attrs: {
-      thickness_mm: '',
-      roll_size_mm: '',
-      pack_area_m2: '',
-      pack_volume_m3: '',
-      roll_area_m2: '',
-      pack_qty: '',
-      marking: '',
-    },
+    attrsText: '',
     inStock: true,
   });
   const token = getAdminToken();
@@ -273,6 +245,33 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
     if (!s) return undefined;
     const n = Number(s.replace(/\s+/g, '').replace(',', '.'));
     return Number.isFinite(n) ? n : undefined;
+  };
+
+  const ATTR_EDITOR_LABELS: Record<string, string> = {
+    thickness_mm: 'Толщина',
+    roll_size_mm: 'Размер рулона',
+    pack_area_m2: 'Площадь в пачке (м2)',
+    pack_volume_m3: 'Объем в пачке (м3)',
+    roll_area_m2: 'Площадь в рулоне (м2)',
+    pack_qty: 'Кратность',
+    marking: 'Маркировка',
+    specs_text: 'Характеристики',
+  };
+
+  const attrsToEditorText = (attrs: any) => {
+    const entries = Object.entries(attrs || {})
+      .map(([k, v]) => [String(k || ''), String(v || '').trim()] as const)
+      .filter(([, v]) => Boolean(v));
+
+    if (!entries.length) return '';
+
+    if (entries.length === 1 && entries[0][0] === 'specs_text') {
+      return entries[0][1];
+    }
+
+    return entries
+      .map(([k, v]) => `${ATTR_EDITOR_LABELS[k] || k}: ${v}`)
+      .join(', ');
   };
 
   const normalizeImageSlots = (images: any, fallbackImage = '') => {
@@ -519,22 +518,8 @@ useEffect(() => {
       description: String(prod.description || ''),
       prices: {
         retail: prod?.prices?.retail !== undefined ? String(prod.prices.retail) : '',
-        purchase: prod?.prices?.purchase !== undefined ? String(prod.prices.purchase) : '',
-        recommended: prod?.prices?.recommended !== undefined ? String(prod.prices.recommended) : '',
-        client: prod?.prices?.client !== undefined ? String(prod.prices.client) : '',
-        online: prod?.prices?.online !== undefined ? String(prod.prices.online) : '',
-        wholesale_5m: prod?.prices?.wholesale_5m !== undefined ? String(prod.prices.wholesale_5m) : '',
-        wholesale_1m: prod?.prices?.wholesale_1m !== undefined ? String(prod.prices.wholesale_1m) : '',
       },
-      attrs: {
-        thickness_mm: String(prod?.attrs?.thickness_mm || ''),
-        roll_size_mm: String(prod?.attrs?.roll_size_mm || ''),
-        pack_area_m2: String(prod?.attrs?.pack_area_m2 || ''),
-        pack_volume_m3: prod?.attrs?.pack_volume_m3 !== undefined ? String(prod.attrs.pack_volume_m3) : '',
-        roll_area_m2: String(prod?.attrs?.roll_area_m2 || ''),
-        pack_qty: String(prod?.attrs?.pack_qty || ''),
-        marking: String(prod?.attrs?.marking || ''),
-      },
+      attrsText: attrsToEditorText(prod?.attrs || {}),
       inStock: !!prod.inStock,
     });
     setIsEditOpen(true);
@@ -546,32 +531,11 @@ useEffect(() => {
 
     const prices: any = {};
     const retail = parseNum(editForm.prices.retail);
-    const purchase = parseNum(editForm.prices.purchase);
-    const recommended = parseNum(editForm.prices.recommended);
-    const client = parseNum(editForm.prices.client);
-    const online = parseNum(editForm.prices.online);
-    const w5 = parseNum(editForm.prices.wholesale_5m);
-    const w1 = parseNum(editForm.prices.wholesale_1m);
 
     if (retail !== undefined) prices.retail = retail;
-    if (purchase !== undefined) prices.purchase = purchase;
-    if (recommended !== undefined) prices.recommended = recommended;
-    if (client !== undefined) prices.client = client;
-    if (online !== undefined) prices.online = online;
-    if (w5 !== undefined) prices.wholesale_5m = w5;
-    if (w1 !== undefined) prices.wholesale_1m = w1;
 
-    const attrs: any = {};
-    Object.entries(editForm.attrs).forEach(([k, v]) => {
-      const s = String(v || '').trim();
-      if (!s) return;
-      if (k === 'pack_volume_m3') {
-        const n = parseNum(s);
-        if (n !== undefined) attrs.pack_volume_m3 = n;
-        return;
-      }
-      attrs[k] = s;
-    });
+    const attrsText = String(editForm.attrsText || '').trim();
+    const attrs: any = attrsText ? { specs_text: attrsText } : {};
 
     try {
       const images = filledImages(editForm.images);
@@ -616,22 +580,8 @@ useEffect(() => {
       description: '',
       prices: {
         retail: '',
-        purchase: '',
-        recommended: '',
-        client: '',
-        online: '',
-        wholesale_5m: '',
-        wholesale_1m: '',
       },
-      attrs: {
-        thickness_mm: '',
-        roll_size_mm: '',
-        pack_area_m2: '',
-        pack_volume_m3: '',
-        roll_area_m2: '',
-        pack_qty: '',
-        marking: '',
-      },
+      attrsText: '',
       inStock: true,
     });
     setIsAddOpen(true);
@@ -739,32 +689,11 @@ useEffect(() => {
     const prices: any = {};
     const p = addForm.prices;
     const retail = toNumberOrUndefined(p.retail);
-    const purchase = toNumberOrUndefined(p.purchase);
-    const recommended = toNumberOrUndefined(p.recommended);
-    const client = toNumberOrUndefined(p.client);
-    const online = toNumberOrUndefined(p.online);
-    const w5 = toNumberOrUndefined(p.wholesale_5m);
-    const w1 = toNumberOrUndefined(p.wholesale_1m);
     if (retail !== undefined) prices.retail = retail;
-    if (purchase !== undefined) prices.purchase = purchase;
-    if (recommended !== undefined) prices.recommended = recommended;
-    if (client !== undefined) prices.client = client;
-    if (online !== undefined) prices.online = online;
-    if (w5 !== undefined) prices.wholesale_5m = w5;
-    if (w1 !== undefined) prices.wholesale_1m = w1;
     payload.prices = prices;
 
-    const a: any = {};
-    const attrs = addForm.attrs;
-    if (attrs.thickness_mm.trim()) a.thickness_mm = attrs.thickness_mm.trim();
-    if (attrs.roll_size_mm.trim()) a.roll_size_mm = attrs.roll_size_mm.trim();
-    if (attrs.pack_area_m2.trim()) a.pack_area_m2 = attrs.pack_area_m2.trim();
-    const packVol = toNumberOrUndefined(attrs.pack_volume_m3);
-    if (packVol !== undefined) a.pack_volume_m3 = packVol;
-    if (attrs.roll_area_m2.trim()) a.roll_area_m2 = attrs.roll_area_m2.trim();
-    if (attrs.pack_qty.trim()) a.pack_qty = attrs.pack_qty.trim();
-    if (attrs.marking.trim()) a.marking = attrs.marking.trim();
-    payload.attrs = a;
+    const attrsText = String(addForm.attrsText || '').trim();
+    payload.attrs = attrsText ? { specs_text: attrsText } : {};
 
     try {
       await adminCreateProduct(token, payload);
@@ -2233,52 +2162,26 @@ useEffect(() => {
               <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="bg-gray-50/60 border border-gray-100 rounded-[28px] p-6">
                   <div className="text-sm font-black text-blue-900 uppercase tracking-widest mb-5">Цены</div>
-                  <div className="grid grid-cols-2 gap-4">
-                    {([
-                      ['Розница (₸)', 'retail'],
-                      ['Закуп (₸)', 'purchase'],
-                      ['Рекоменд. (₸)', 'recommended'],
-                      ['Клиент (₸)', 'client'],
-                      ['Интернет (₸)', 'online'],
-                      ['От 5 млн (₸)', 'wholesale_5m'],
-                      ['От 1 млн (₸)', 'wholesale_1m'],
-                    ] as any).map(([label, key]: [string, keyof typeof addForm.prices]) => (
-                      <div key={key}>
-                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{label}</div>
-                        <input
-                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
-                          value={(addForm.prices as any)[key]}
-                          onChange={(e) => setAddForm({ ...addForm, prices: { ...addForm.prices, [key]: e.target.value } })}
-                          placeholder="0"
-                        />
-                      </div>
-                    ))}
+                  <div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Розница (₸)</div>
+                    <input
+                      className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                      value={addForm.prices.retail}
+                      onChange={(e) => setAddForm({ ...addForm, prices: { ...addForm.prices, retail: e.target.value } })}
+                      placeholder="0"
+                    />
                   </div>
                 </div>
 
                 <div className="bg-gray-50/60 border border-gray-100 rounded-[28px] p-6">
-                  <div className="text-sm font-black text-blue-900 uppercase tracking-widest mb-5">Атрибуты</div>
-                  <div className="grid grid-cols-2 gap-4">
-                    {([
-                      ['Толщина (мм)', 'thickness_mm'],
-                      ['Размер рулона', 'roll_size_mm'],
-                      ['Площадь в пачке (м2)', 'pack_area_m2'],
-                      ['Объём в пачке (м3)', 'pack_volume_m3'],
-                      ['Площадь в рулоне (м2)', 'roll_area_m2'],
-                      ['Кратность / Кол-во', 'pack_qty'],
-                      ['Маркировка', 'marking'],
-                    ] as any).map(([label, key]: [string, keyof typeof addForm.attrs]) => (
-                      <div key={key} className={key === 'marking' ? 'col-span-2' : ''}>
-                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{label}</div>
-                        <input
-                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
-                          value={(addForm.attrs as any)[key]}
-                          onChange={(e) => setAddForm({ ...addForm, attrs: { ...addForm.attrs, [key]: e.target.value } })}
-                          placeholder=""
-                        />
-                      </div>
-                    ))}
-                  </div>
+                  <div className="text-sm font-black text-blue-900 uppercase tracking-widest mb-5">Характеристики (формат Excel)</div>
+                  <div className="text-xs text-gray-500 mb-3">Введите строкой: Название: значение, Название: значение, ...</div>
+                  <textarea
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm min-h-[160px]"
+                    value={addForm.attrsText}
+                    onChange={(e) => setAddForm({ ...addForm, attrsText: e.target.value })}
+                    placeholder="Монтажный диаметр мм: 110, Высота выпуска мм: 470, Серия: A110Y"
+                  />
                 </div>
               </div>
 
@@ -2430,52 +2333,26 @@ useEffect(() => {
               <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="rounded-3xl border border-gray-100 p-6">
                   <div className="text-xs font-black uppercase tracking-widest text-blue-900 mb-5">Цены</div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    {([
-                      ['Розница', 'retail'],
-                      ['Закупочная', 'purchase'],
-                      ['Рекоменд.', 'recommended'],
-                      ['Для клиентов', 'client'],
-                      ['Интернет', 'online'],
-                      ['От 5 млн', 'wholesale_5m'],
-                      ['От 1 млн', 'wholesale_1m'],
-                    ] as any).map(([label, key]: [string, keyof typeof editForm.prices]) => (
-                      <div key={key}>
-                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{label}</div>
-                        <input
-                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
-                          value={(editForm.prices as any)[key]}
-                          onChange={(e) => setEditForm({ ...editForm, prices: { ...editForm.prices, [key]: e.target.value } })}
-                          placeholder=""
-                        />
-                      </div>
-                    ))}
+                  <div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Розница</div>
+                    <input
+                      className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                      value={editForm.prices.retail}
+                      onChange={(e) => setEditForm({ ...editForm, prices: { ...editForm.prices, retail: e.target.value } })}
+                      placeholder=""
+                    />
                   </div>
                 </div>
 
                 <div className="rounded-3xl border border-gray-100 p-6">
-                  <div className="text-xs font-black uppercase tracking-widest text-blue-900 mb-5">Характеристики</div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    {([
-                      ['Толщина', 'thickness_mm'],
-                      ['Размер рулона', 'roll_size_mm'],
-                      ['Площадь в пачке (м2)', 'pack_area_m2'],
-                      ['Объем в пачке (м3)', 'pack_volume_m3'],
-                      ['Площадь в рулоне (м2)', 'roll_area_m2'],
-                      ['Кратность', 'pack_qty'],
-                      ['Маркировка', 'marking'],
-                    ] as any).map(([label, key]: [string, keyof typeof editForm.attrs]) => (
-                      <div key={key} className={key === 'marking' ? 'col-span-2' : ''}>
-                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{label}</div>
-                        <input
-                          className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
-                          value={(editForm.attrs as any)[key]}
-                          onChange={(e) => setEditForm({ ...editForm, attrs: { ...editForm.attrs, [key]: e.target.value } })}
-                          placeholder=""
-                        />
-                      </div>
-                    ))}
-                  </div>
+                  <div className="text-xs font-black uppercase tracking-widest text-blue-900 mb-5">Характеристики (формат Excel)</div>
+                  <div className="text-xs text-gray-500 mb-3">Введите строкой: Название: значение, Название: значение, ...</div>
+                  <textarea
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm min-h-[160px]"
+                    value={editForm.attrsText}
+                    onChange={(e) => setEditForm({ ...editForm, attrsText: e.target.value })}
+                    placeholder="Монтажный диаметр мм: 110, Высота выпуска мм: 470, Серия: A110Y"
+                  />
 
                   <div className="mt-6 flex items-center justify-between rounded-2xl bg-gray-50 p-4">
                     <div className="text-sm font-bold text-blue-900">Наличие</div>
