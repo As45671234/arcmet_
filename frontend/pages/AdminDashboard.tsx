@@ -817,7 +817,7 @@ useEffect(() => {
               <i className="fas fa-file-excel"></i>
             </div>
             <h3 className="text-3xl font-black text-blue-900 mb-4 uppercase tracking-tighter">Загрузка каталога</h3>
-            <p className="text-gray-400 max-w-2xl mx-auto mb-10 font-medium">Сначала выберите поставщика, затем загрузите Excel в шаблоне с колонками: Номенклатура, Ед. изм., Количество, Описание, Картинка 1-3, Артикул, Цена.</p>
+            <p className="text-gray-400 max-w-2xl mx-auto mb-10 font-medium">Сначала выберите поставщика, затем загрузите Excel в шаблоне с колонками: Номенклатура, Количество, Описание, Картинка 1-3, Артикул, Цена. Если колонка единицы измерения отсутствует, будет использовано значение "шт".</p>
 
             <div className="max-w-4xl mx-auto mb-10 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 text-left">
               {IMPORT_SUPPLIERS.map((supplier) => {
