@@ -65,24 +65,26 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
       });
 
       setOrderSuccess(true);
-      setTimeout(() => {
-        clearCart();
-        setCustomerName('');
-        setCustomerPhone('');
-        setCustomerEmail('');
-        setAddress('');
-        setComment('');
-        setDeliveryMethod('courier_astana');
-        setPaymentMethod('kaspi');
-        setOrderSuccess(false);
-        navigate('/');
-      }, 3000);
     } catch (e: any) {
       const msg = String(e?.message || '').trim();
       setOrderError(msg === 'invalid order' ? 'Проверьте телефон, email и товары в корзине.' : (msg || 'Ошибка при отправке заказа'));
     } finally {
       setIsOrdering(false);
     }
+  };
+
+  const handleSuccessClose = () => {
+    clearCart();
+    setCustomerName('');
+    setCustomerPhone('');
+    setCustomerEmail('');
+    setAddress('');
+    setComment('');
+    setDeliveryMethod('courier_astana');
+    setPaymentMethod('kaspi');
+    setIsCheckoutStarted(false);
+    setOrderSuccess(false);
+    navigate('/');
   };
 
   if (cart.length === 0) {
@@ -201,17 +203,6 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
           ) : (
             <div className="space-y-2">
               <button
-                form="checkout-form"
-                type="submit"
-                disabled={isOrdering || !canSubmitOrder}
-                className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl transition-all flex items-center justify-center gap-3 ${
-                  isOrdering || !canSubmitOrder ? 'bg-gray-200 text-gray-400 shadow-none cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'
-                }`}
-              >
-                {isOrdering ? <i className="fas fa-spinner fa-spin"></i> : 'Подтвердить заказ'}
-              </button>
-              {!canSubmitOrder ? <div className="text-xs text-gray-400 text-center">Сначала заполните телефон и email в форме ниже</div> : null}
-              <button
                 type="button"
                 onClick={() => setIsCheckoutStarted(false)}
                 className="w-full py-3 rounded-2xl font-bold text-sm border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
@@ -240,8 +231,9 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
                   <button
                     type="button"
                     onClick={() => setDeliveryMethod('courier_astana')}
-                    className={`w-full text-left rounded-2xl border px-4 py-3 transition-all ${deliveryMethod === 'courier_astana' ? 'border-blue-300 bg-white shadow-sm' : 'border-gray-200 bg-white hover:border-blue-200'}`}
+                    className={`w-full text-left rounded-2xl border px-4 py-3 transition-all relative ${deliveryMethod === 'courier_astana' ? 'border-blue-500 bg-blue-50 shadow-md shadow-blue-100 ring-2 ring-blue-100' : 'border-gray-200 bg-white hover:border-blue-200'}`}
                   >
+                    {deliveryMethod === 'courier_astana' ? <span className="absolute top-3 right-3 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs"><i className="fas fa-check"></i></span> : null}
                     <div className="font-bold text-blue-900 text-sm">Доставка курьером по Астане</div>
                     <div className="text-xs text-gray-500 mt-1">Стоимость доставки рассчитывается менеджером.</div>
                   </button>
@@ -249,8 +241,9 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
                   <button
                     type="button"
                     onClick={() => setDeliveryMethod('pickup')}
-                    className={`w-full text-left rounded-2xl border px-4 py-3 transition-all ${deliveryMethod === 'pickup' ? 'border-blue-300 bg-white shadow-sm' : 'border-gray-200 bg-white hover:border-blue-200'}`}
+                    className={`w-full text-left rounded-2xl border px-4 py-3 transition-all relative ${deliveryMethod === 'pickup' ? 'border-blue-500 bg-blue-50 shadow-md shadow-blue-100 ring-2 ring-blue-100' : 'border-gray-200 bg-white hover:border-blue-200'}`}
                   >
+                    {deliveryMethod === 'pickup' ? <span className="absolute top-3 right-3 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs"><i className="fas fa-check"></i></span> : null}
                     <div className="font-bold text-blue-900 text-sm">Самовывоз (бесплатно)</div>
                     <div className="text-xs text-gray-500 mt-1">Забрать заказ в офисе/складе по договоренности.</div>
                   </button>
@@ -258,8 +251,9 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
                   <button
                     type="button"
                     onClick={() => setDeliveryMethod('transport_company')}
-                    className={`w-full text-left rounded-2xl border px-4 py-3 transition-all ${deliveryMethod === 'transport_company' ? 'border-blue-300 bg-white shadow-sm' : 'border-gray-200 bg-white hover:border-blue-200'}`}
+                    className={`w-full text-left rounded-2xl border px-4 py-3 transition-all relative ${deliveryMethod === 'transport_company' ? 'border-blue-500 bg-blue-50 shadow-md shadow-blue-100 ring-2 ring-blue-100' : 'border-gray-200 bg-white hover:border-blue-200'}`}
                   >
+                    {deliveryMethod === 'transport_company' ? <span className="absolute top-3 right-3 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs"><i className="fas fa-check"></i></span> : null}
                     <div className="font-bold text-blue-900 text-sm">Транспортная компания (inDrive, CDEK)</div>
                     <div className="text-xs text-gray-500 mt-1">Доставку рассчитываем после подтверждения заказа.</div>
                   </button>
@@ -272,16 +266,18 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('kaspi')}
-                    className={`w-full text-left rounded-2xl border px-4 py-3 transition-all ${paymentMethod === 'kaspi' ? 'border-blue-300 bg-white shadow-sm' : 'border-gray-200 bg-white hover:border-blue-200'}`}
+                    className={`w-full text-left rounded-2xl border px-4 py-3 transition-all relative ${paymentMethod === 'kaspi' ? 'border-blue-500 bg-blue-50 shadow-md shadow-blue-100 ring-2 ring-blue-100' : 'border-gray-200 bg-white hover:border-blue-200'}`}
                   >
+                    {paymentMethod === 'kaspi' ? <span className="absolute top-1/2 right-3 -translate-y-1/2 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs"><i className="fas fa-check"></i></span> : null}
                     <div className="font-bold text-blue-900 text-sm">Kaspi Pay (Gold, Red, Рассрочка)</div>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('halyk')}
-                    className={`w-full text-left rounded-2xl border px-4 py-3 transition-all ${paymentMethod === 'halyk' ? 'border-blue-300 bg-white shadow-sm' : 'border-gray-200 bg-white hover:border-blue-200'}`}
+                    className={`w-full text-left rounded-2xl border px-4 py-3 transition-all relative ${paymentMethod === 'halyk' ? 'border-blue-500 bg-blue-50 shadow-md shadow-blue-100 ring-2 ring-blue-100' : 'border-gray-200 bg-white hover:border-blue-200'}`}
                   >
+                    {paymentMethod === 'halyk' ? <span className="absolute top-1/2 right-3 -translate-y-1/2 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs"><i className="fas fa-check"></i></span> : null}
                     <div className="font-bold text-blue-900 text-sm">Halyk Bank (онлайн-оплата)</div>
                   </button>
                 </div>
@@ -326,6 +322,21 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
                 onChange={(e) => setComment(e.target.value)}
               ></textarea>
             </div>
+
+            <div className="lg:col-span-2 pt-2 border-t border-gray-100 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+              <div className="text-xs text-gray-400">
+                {!canSubmitOrder ? 'Для подтверждения заполните телефон и email.' : 'Проверьте данные и подтвердите заказ.'}
+              </div>
+              <button
+                type="submit"
+                disabled={isOrdering || !canSubmitOrder}
+                className={`w-full sm:w-auto sm:min-w-[260px] py-4 px-8 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl transition-all flex items-center justify-center gap-3 ${
+                  isOrdering || !canSubmitOrder ? 'bg-gray-200 text-gray-400 shadow-none cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'
+                }`}
+              >
+                {isOrdering ? <i className="fas fa-spinner fa-spin"></i> : 'Подтвердить заказ'}
+              </button>
+            </div>
           </form>
         </div>
       )}
@@ -343,6 +354,13 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
               <div>{customerPhone}</div>
               <div>{customerEmail}</div>
             </div>
+            <button
+              type="button"
+              onClick={handleSuccessClose}
+              className="mt-6 w-full py-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-sm transition-colors"
+            >
+              На главную
+            </button>
           </div>
         </div>
       )}
