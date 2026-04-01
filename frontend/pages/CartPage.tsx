@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { sendOrder } from '../services/api';
 import { CartItem } from '../types';
 import { Link, useNavigate } from 'react-router-dom';
@@ -12,6 +12,7 @@ interface CartPageProps {
 
 const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantity, clearCart }) => {
   const navigate = useNavigate();
+  const checkoutBlockRef = useRef<HTMLDivElement | null>(null);
   const [isOrdering, setIsOrdering] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderError, setOrderError] = useState('');
@@ -36,6 +37,7 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
   };
 
   const total = cart.reduce((sum, item) => sum + (item.prices.retail || 0) * item.quantity, 0);
+  const canSubmitOrder = String(customerPhone || '').trim().length > 0 && String(customerEmail || '').trim().length > 0;
 
   const handleOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -184,7 +186,12 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
             <div className="space-y-3">
               <button
                 type="button"
-                onClick={() => setIsCheckoutStarted(true)}
+                onClick={() => {
+                  setIsCheckoutStarted(true);
+                  setTimeout(() => {
+                    checkoutBlockRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 60);
+                }}
                 className="w-full py-4 rounded-2xl font-black uppercase tracking-widest text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-200 transition-all"
               >
                 Оформить заказ
@@ -196,13 +203,14 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
               <button
                 form="checkout-form"
                 type="submit"
-                disabled={isOrdering}
+                disabled={isOrdering || !canSubmitOrder}
                 className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl transition-all flex items-center justify-center gap-3 ${
-                  isOrdering ? 'bg-gray-200 text-gray-400' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'
+                  isOrdering || !canSubmitOrder ? 'bg-gray-200 text-gray-400 shadow-none cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'
                 }`}
               >
                 {isOrdering ? <i className="fas fa-spinner fa-spin"></i> : 'Подтвердить заказ'}
               </button>
+              {!canSubmitOrder ? <div className="text-xs text-gray-400 text-center">Сначала заполните телефон и email в форме ниже</div> : null}
               <button
                 type="button"
                 onClick={() => setIsCheckoutStarted(false)}
@@ -222,7 +230,7 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
       </div>
 
       {isCheckoutStarted && (
-        <div className="mt-8 sm:mt-10 bg-white border border-gray-100 rounded-3xl sm:rounded-[36px] shadow-sm p-5 sm:p-8 lg:p-10">
+        <div ref={checkoutBlockRef} className="mt-8 sm:mt-10 bg-white border border-gray-100 rounded-3xl sm:rounded-[36px] shadow-sm p-5 sm:p-8 lg:p-10">
           <h2 className="text-xl sm:text-2xl font-black text-blue-900 uppercase tracking-tighter mb-5 sm:mb-6">Данные для оформления</h2>
           <form id="checkout-form" onSubmit={handleOrder} className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
             <div className="space-y-6">
