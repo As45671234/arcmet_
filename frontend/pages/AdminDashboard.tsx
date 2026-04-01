@@ -2026,7 +2026,7 @@ useEffect(() => {
             <div className="p-8 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <div className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Добавить товар</div>
-                <div className="text-gray-400 font-medium text-sm">Заполните поля и сохраните товар в MongoDB</div>
+                <div className="text-gray-400 font-medium text-sm">Заполните поля и сохраните товар</div>
               </div>
               <button
                 onClick={() => setIsAddOpen(false)}
@@ -2067,25 +2067,14 @@ useEffect(() => {
                     placeholder="Например: Protan"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-5">
-                  <div>
-                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Ед. изм.</div>
-                    <input
-                      className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
-                      value={addForm.unit}
-                      onChange={(e) => setAddForm({ ...addForm, unit: e.target.value })}
-                      placeholder="шт"
-                    />
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Артикул</div>
-                    <input
-                      className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
-                      value={addForm.sku}
-                      onChange={(e) => setAddForm({ ...addForm, sku: e.target.value })}
-                      placeholder="SKU"
-                    />
-                  </div>
+                <div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Артикул</div>
+                  <input
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                    value={addForm.sku}
+                    onChange={(e) => setAddForm({ ...addForm, sku: e.target.value })}
+                    placeholder="SKU"
+                  />
                 </div>
 
                 <div className="md:col-span-2">
@@ -2246,16 +2235,6 @@ useEffect(() => {
                     value={editForm.brandOrGroup}
                     onChange={(e) => setEditForm({ ...editForm, brandOrGroup: e.target.value })}
                     placeholder="Например: Protan"
-                  />
-                </div>
-
-                <div>
-                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Ед. изм.</div>
-                  <input
-                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
-                    value={editForm.unit}
-                    onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
-                    placeholder="шт"
                   />
                 </div>
 
