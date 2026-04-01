@@ -13,6 +13,7 @@ interface CartPageProps {
 const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantity, clearCart }) => {
   const navigate = useNavigate();
   const [isOrdering, setIsOrdering] = useState(false);
+  const [orderSuccess, setOrderSuccess] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
@@ -52,16 +53,19 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
         total,
       });
 
-      alert('Заказ успешно сформирован. Мы свяжемся с вами по указанным контактам.');
-      clearCart();
-      setCustomerName('');
-      setCustomerPhone('');
-      setCustomerEmail('');
-      setAddress('');
-      setComment('');
-      setDeliveryMethod('courier_astana');
-      setPaymentMethod('kaspi');
-      navigate('/');
+      setOrderSuccess(true);
+      setTimeout(() => {
+        clearCart();
+        setCustomerName('');
+        setCustomerPhone('');
+        setCustomerEmail('');
+        setAddress('');
+        setComment('');
+        setDeliveryMethod('courier_astana');
+        setPaymentMethod('kaspi');
+        setOrderSuccess(false);
+        navigate('/');
+      }, 3000);
     } catch (e: any) {
       alert(e?.message || 'Ошибка при отправке заказа');
     } finally {
@@ -215,6 +219,8 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
               </div>
             </div>
 
+            <div className="border-t border-gray-100 pt-4 mt-6"></div>
+
             <input
               type="text"
               placeholder="Имя (не обязательно)"
@@ -262,6 +268,24 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
               {isOrdering ? <i className="fas fa-spinner fa-spin"></i> : 'Подтвердить заказ'}
             </button>
           </form>
+
+          {/* Success Modal */}
+          {orderSuccess && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
+              <div className="bg-white rounded-[40px] p-12 w-[95%] max-w-lg shadow-2xl text-center animate-in fade-in duration-300">
+                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <i className="fas fa-check text-3xl text-green-600"></i>
+                </div>
+                <h3 className="text-2xl font-black text-blue-900 mb-4 uppercase tracking-tighter">Заказ принят!</h3>
+                <p className="text-gray-600 text-lg mb-6">Спасибо за заказ. Мы свяжемся с вами по указанным контактам в течение 30 минут.</p>
+                <div className="bg-blue-50 rounded-3xl p-4 border border-blue-100 text-sm text-gray-700">
+                  <div className="font-bold text-blue-900 mb-2">Ваши контакты:</div>
+                  <div>{customerPhone}</div>
+                  <div>{customerEmail}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="mt-6 text-center">
             <Link to="/catalog" className="text-blue-400 font-bold text-sm hover:underline">
