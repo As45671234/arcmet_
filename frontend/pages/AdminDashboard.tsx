@@ -1116,6 +1116,8 @@ useEffect(() => {
                           <div className="mt-2 font-black text-blue-900 text-lg">{activeOrder.customerName}</div>
                           <div className="mt-1 text-sm text-gray-700">{activeOrder.customerPhone}</div>
                           {activeOrder.customerEmail ? <div className="mt-1 text-sm text-gray-700">{activeOrder.customerEmail}</div> : null}
+                          <div className="mt-3 text-sm text-gray-700"><span className="font-bold">Доставка:</span> {activeOrder.deliveryMethod === 'pickup' ? 'Самовывоз (бесплатно)' : activeOrder.deliveryMethod === 'transport_company' ? 'Транспортная компания (inDrive, CDEK)' : 'Доставка курьером по Астане'}</div>
+                          <div className="mt-1 text-sm text-gray-700"><span className="font-bold">Оплата:</span> {activeOrder.paymentMethod === 'halyk' ? 'Halyk Bank (онлайн-оплата)' : 'Kaspi Pay (Gold, Red, Рассрочка)'}</div>
                           {activeOrder.address ? <div className="mt-3 text-sm text-gray-700"><span className="font-bold">Адрес:</span> {activeOrder.address}</div> : null}
                           {activeOrder.comment ? <div className="mt-3 text-sm text-gray-700"><span className="font-bold">Комментарий:</span> {activeOrder.comment}</div> : null}
                         </div>

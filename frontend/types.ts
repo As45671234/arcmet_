@@ -60,6 +60,8 @@ export interface Order {
   customerEmail?: string;
   address: string;
   comment?: string;
+  deliveryMethod?: 'courier_astana' | 'pickup' | 'transport_company';
+  paymentMethod?: 'kaspi' | 'halyk';
   items: CartItem[];
   total: number;
   createdAt?: string;

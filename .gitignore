@@ -23,3 +23,7 @@ yarn-error.log*
 
 # Misc
 .cache/
+
+# Monitoring secrets (create manually on VPS, never commit)
+.env.monitoring
+healthcheck.log

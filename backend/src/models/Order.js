@@ -22,6 +22,8 @@ const OrderSchema = new mongoose.Schema(
     customerEmail: { type: String, required: true },
     address: { type: String, default: "" },
     comment: { type: String, default: "" },
+    deliveryMethod: { type: String, enum: ["courier_astana", "pickup", "transport_company"], default: "courier_astana" },
+    paymentMethod: { type: String, enum: ["kaspi", "halyk"], default: "kaspi" },
 
     status: { type: String, enum: ["new", "processing", "completed", "cancelled"], default: "new", index: true },
 

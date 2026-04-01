@@ -17,6 +17,20 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [address, setAddress] = useState('');
+  const [comment, setComment] = useState('');
+  const [deliveryMethod, setDeliveryMethod] = useState<'courier_astana' | 'pickup' | 'transport_company'>('courier_astana');
+  const [paymentMethod, setPaymentMethod] = useState<'kaspi' | 'halyk'>('kaspi');
+
+  const deliveryLabels: Record<'courier_astana' | 'pickup' | 'transport_company', string> = {
+    courier_astana: 'Доставка курьером по Астане',
+    pickup: 'Самовывоз (бесплатно)',
+    transport_company: 'Транспортная компания (inDrive, CDEK)',
+  };
+
+  const paymentLabels: Record<'kaspi' | 'halyk', string> = {
+    kaspi: 'Kaspi Pay (Gold, Red, Рассрочка)',
+    halyk: 'Halyk Bank (онлайн-оплата)',
+  };
 
   const total = cart.reduce((sum, item) => sum + (item.prices.retail || 0) * item.quantity, 0);
 
@@ -31,6 +45,9 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
         customerPhone,
         customerEmail,
         address,
+        comment,
+        deliveryMethod,
+        paymentMethod,
         items: cart,
         total,
       });
@@ -41,6 +58,9 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
       setCustomerPhone('');
       setCustomerEmail('');
       setAddress('');
+      setComment('');
+      setDeliveryMethod('courier_astana');
+      setPaymentMethod('kaspi');
       navigate('/');
     } catch (e: any) {
       alert(e?.message || 'Ошибка при отправке заказа');
@@ -131,9 +151,70 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
               <span>Товары ({cart.length})</span>
               <span className="text-blue-900 font-black">{total.toLocaleString()} ₸</span>
             </div>
+            <div className="flex justify-between text-gray-500 font-medium">
+              <span>Доставка</span>
+              <span className="text-blue-900 text-sm font-bold text-right max-w-[180px]">{deliveryLabels[deliveryMethod]}</span>
+            </div>
+            <div className="flex justify-between text-gray-500 font-medium">
+              <span>Оплата</span>
+              <span className="text-blue-900 text-sm font-bold text-right max-w-[180px]">{paymentLabels[paymentMethod]}</span>
+            </div>
           </div>
 
           <form onSubmit={handleOrder} className="space-y-4">
+            <div className="rounded-3xl border border-gray-100 p-4 bg-gray-50">
+              <h4 className="text-sm font-black text-blue-900 uppercase tracking-widest mb-3">Способ доставки</h4>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMethod('courier_astana')}
+                  className={`w-full text-left rounded-2xl border px-4 py-3 transition-all ${deliveryMethod === 'courier_astana' ? 'border-blue-300 bg-white shadow-sm' : 'border-gray-200 bg-white hover:border-blue-200'}`}
+                >
+                  <div className="font-bold text-blue-900 text-sm">Доставка курьером по Астане</div>
+                  <div className="text-xs text-gray-500 mt-1">Стоимость доставки рассчитывается менеджером.</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMethod('pickup')}
+                  className={`w-full text-left rounded-2xl border px-4 py-3 transition-all ${deliveryMethod === 'pickup' ? 'border-blue-300 bg-white shadow-sm' : 'border-gray-200 bg-white hover:border-blue-200'}`}
+                >
+                  <div className="font-bold text-blue-900 text-sm">Самовывоз (бесплатно)</div>
+                  <div className="text-xs text-gray-500 mt-1">Забрать заказ в офисе/складе по договоренности.</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMethod('transport_company')}
+                  className={`w-full text-left rounded-2xl border px-4 py-3 transition-all ${deliveryMethod === 'transport_company' ? 'border-blue-300 bg-white shadow-sm' : 'border-gray-200 bg-white hover:border-blue-200'}`}
+                >
+                  <div className="font-bold text-blue-900 text-sm">Транспортная компания (inDrive, CDEK)</div>
+                  <div className="text-xs text-gray-500 mt-1">Доставку рассчитываем после подтверждения заказа.</div>
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-gray-100 p-4 bg-gray-50">
+              <h4 className="text-sm font-black text-blue-900 uppercase tracking-widest mb-3">Способ оплаты</h4>
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('kaspi')}
+                  className={`w-full text-left rounded-2xl border px-4 py-3 transition-all ${paymentMethod === 'kaspi' ? 'border-blue-300 bg-white shadow-sm' : 'border-gray-200 bg-white hover:border-blue-200'}`}
+                >
+                  <div className="font-bold text-blue-900 text-sm">Kaspi Pay (Gold, Red, Рассрочка)</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('halyk')}
+                  className={`w-full text-left rounded-2xl border px-4 py-3 transition-all ${paymentMethod === 'halyk' ? 'border-blue-300 bg-white shadow-sm' : 'border-gray-200 bg-white hover:border-blue-200'}`}
+                >
+                  <div className="font-bold text-blue-900 text-sm">Halyk Bank (онлайн-оплата)</div>
+                </button>
+              </div>
+            </div>
+
             <input
               type="text"
               placeholder="Имя (не обязательно)"
@@ -158,10 +239,17 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
               className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 outline-none focus:ring-4 focus:ring-blue-50 transition-all text-sm"
             />
             <textarea
-              placeholder="Адрес доставки и комментарий"
+              placeholder="Адрес доставки"
               className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 outline-none focus:ring-4 focus:ring-blue-50 transition-all h-32 text-sm"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
+            ></textarea>
+
+            <textarea
+              placeholder="Комментарий к заказу"
+              className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 outline-none focus:ring-4 focus:ring-blue-50 transition-all h-24 text-sm"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
             ></textarea>
 
             <button

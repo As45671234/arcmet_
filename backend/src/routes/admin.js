@@ -577,6 +577,8 @@ router.get("/orders", requireAdmin, async (req, res) => {
       customerEmail: o.customerEmail || "",
       address: o.address || "",
       comment: o.comment || "",
+      deliveryMethod: o.deliveryMethod || "courier_astana",
+      paymentMethod: o.paymentMethod || "kaspi",
       status: o.status,
       total: o.total || 0,
       createdAt: o.createdAt
@@ -596,6 +598,8 @@ router.get("/orders/:id", requireAdmin, async (req, res) => {
       customerEmail: order.customerEmail || "",
       address: order.address || "",
       comment: order.comment || "",
+      deliveryMethod: order.deliveryMethod || "courier_astana",
+      paymentMethod: order.paymentMethod || "kaspi",
       status: order.status,
       total: order.total || 0,
       items: order.items || [],
@@ -649,6 +653,8 @@ router.get("/orders/:id/export", requireAdmin, async (req, res) => {
     ["Customer Email", String(order.customerEmail || "")],
     ["Address", String(order.address || "")],
     ["Comment", String(order.comment || "")],
+    ["Delivery Method", String(order.deliveryMethod || "courier_astana")],
+    ["Payment Method", String(order.paymentMethod || "kaspi")],
     ["Total", Number(order.total || 0)],
   ].map(([field, value]) => ({ field, value }));
 

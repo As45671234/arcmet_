@@ -30,7 +30,7 @@ function normalizeOrderItems(items) {
 }
 
 async function createOrderFromPayload(payload) {
-  const { customerName, customerPhone, customerEmail, address, comment, items, total } = payload || {};
+  const { customerName, customerPhone, customerEmail, address, comment, deliveryMethod, paymentMethod, items, total } = payload || {};
   if (!customerPhone || !customerEmail || !Array.isArray(items) || items.length === 0) return null;
 
   const cleanItems = normalizeOrderItems(items);
@@ -39,12 +39,22 @@ async function createOrderFromPayload(payload) {
   const computedTotal = cleanItems.reduce((s, x) => s + Number(x.lineTotal || 0), 0);
   const finalTotal = Number.isFinite(Number(total)) ? Number(total) : computedTotal;
 
+  const normalizedDeliveryMethod = ["courier_astana", "pickup", "transport_company"].includes(String(deliveryMethod || "").trim())
+    ? String(deliveryMethod).trim()
+    : "courier_astana";
+
+  const normalizedPaymentMethod = ["kaspi", "halyk"].includes(String(paymentMethod || "").trim())
+    ? String(paymentMethod).trim()
+    : "kaspi";
+
   return Order.create({
     customerName: String(customerName || "").trim(),
     customerPhone: String(customerPhone).trim(),
     customerEmail: String(customerEmail).trim(),
     address: String(address || "").trim(),
     comment: String(comment || "").trim(),
+    deliveryMethod: normalizedDeliveryMethod,
+    paymentMethod: normalizedPaymentMethod,
     items: cleanItems,
     total: finalTotal
   });
