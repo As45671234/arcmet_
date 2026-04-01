@@ -14,6 +14,7 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
   const navigate = useNavigate();
   const [isOrdering, setIsOrdering] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
+  const [orderError, setOrderError] = useState('');
   const [isCheckoutStarted, setIsCheckoutStarted] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -68,7 +69,7 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
         navigate('/');
       }, 3000);
     } catch (e: any) {
-      alert(e?.message || 'Ошибка при отправке заказа');
+      setOrderError(e?.message || 'Ошибка при отправке заказа');
     } finally {
       setIsOrdering(false);
     }
@@ -93,17 +94,17 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
   }
 
   return (
-    <div className="container mx-auto px-6 py-12">
-      <h1 className="text-4xl font-black text-blue-900 mb-12 uppercase tracking-tighter">Оформление заказа</h1>
+    <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-10">
+      <h1 className="text-3xl sm:text-4xl font-black text-blue-900 mb-6 sm:mb-10 uppercase tracking-tighter">Оформление заказа</h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 items-start">
-        <div className="lg:col-span-2 space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-10 items-start">
+        <div className="lg:col-span-2 space-y-3 sm:space-y-4">
           {cart.map((item) => (
             <div
               key={item.id}
-              className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col md:flex-row items-center gap-8"
+              className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6"
             >
-              <div className="w-24 h-24 bg-gray-100 rounded-2xl overflow-hidden flex-shrink-0">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gray-100 rounded-2xl overflow-hidden flex-shrink-0">
                 <img
                   src={item.image ? item.image : '/logo.png'}
                   alt=""
@@ -111,32 +112,33 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
                 />
               </div>
 
-              <div className="flex-grow">
+              <div className="flex-grow min-w-0">
                 <div className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">{item.brandOrGroup}</div>
-                <h3 className="text-lg font-bold text-blue-900 line-clamp-1">{item.name}</h3>
+                <h3 className="text-base sm:text-lg font-bold text-blue-900 line-clamp-1">{item.name}</h3>
+                {item.sku ? <div className="text-[11px] text-gray-400 mt-1">Арт: {item.sku}</div> : null}
                 <div className="text-sm text-gray-400 mt-1">
                   {item.prices.retail ? `${item.prices.retail.toLocaleString()} ₸ / ${item.unit}` : 'По запросу'}
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 bg-gray-50 p-2 rounded-2xl">
+              <div className="flex items-center gap-3 bg-gray-50 p-2 rounded-2xl self-start sm:self-auto">
                 <button
                   onClick={() => updateQuantity(item.id, -1)}
-                  className="w-10 h-10 rounded-xl hover:bg-white text-blue-900 font-bold transition-all shadow-sm"
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl hover:bg-white text-blue-900 font-bold transition-all shadow-sm"
                 >
                   <i className="fas fa-minus"></i>
                 </button>
                 <span className="w-8 text-center font-black text-blue-900">{item.quantity}</span>
                 <button
                   onClick={() => updateQuantity(item.id, 1)}
-                  className="w-10 h-10 rounded-xl hover:bg-white text-blue-900 font-bold transition-all shadow-sm"
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl hover:bg-white text-blue-900 font-bold transition-all shadow-sm"
                 >
                   <i className="fas fa-plus"></i>
                 </button>
               </div>
 
-              <div className="text-right min-w-[120px]">
-                <div className="text-2xl font-black text-blue-600">
+              <div className="text-right min-w-[96px] sm:min-w-[120px] ml-auto">
+                <div className="text-xl sm:text-2xl font-black text-blue-600">
                   {item.prices.retail ? `${(item.prices.retail * item.quantity).toLocaleString()} ₸` : '...'}
                 </div>
               </div>
@@ -148,8 +150,8 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
           ))}
         </div>
 
-        <div className="bg-white p-10 rounded-[40px] shadow-2xl border border-gray-100 sticky top-32">
-          <h3 className="text-2xl font-black text-blue-900 mb-8 uppercase tracking-tighter">Детали заказа</h3>
+        <div className="bg-white p-6 sm:p-8 rounded-3xl sm:rounded-[36px] shadow-2xl border border-gray-100 sticky top-28">
+          <h3 className="text-2xl font-black text-blue-900 mb-6 uppercase tracking-tighter">Детали заказа</h3>
 
           <div className="space-y-4 mb-8">
             <div className="flex justify-between text-gray-500 font-medium">
@@ -171,24 +173,36 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
           </div>
 
           {!isCheckoutStarted ? (
-            <button
-              type="button"
-              onClick={() => setIsCheckoutStarted(true)}
-              className="w-full py-5 rounded-2xl font-black uppercase tracking-widest text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-200 transition-all"
-            >
-              Оформить заказ
-            </button>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setIsCheckoutStarted(true)}
+                className="w-full py-4 rounded-2xl font-black uppercase tracking-widest text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-200 transition-all"
+              >
+                Оформить заказ
+              </button>
+              <p className="text-xs text-gray-400 text-center">Далее выберите доставку, оплату и заполните контакты</p>
+            </div>
           ) : (
-            <button
-              form="checkout-form"
-              type="submit"
-              disabled={isOrdering}
-              className={`w-full py-5 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl transition-all flex items-center justify-center gap-3 ${
-                isOrdering ? 'bg-gray-200 text-gray-400' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'
-              }`}
-            >
-              {isOrdering ? <i className="fas fa-spinner fa-spin"></i> : 'Подтвердить заказ'}
-            </button>
+            <div className="space-y-2">
+              <button
+                form="checkout-form"
+                type="submit"
+                disabled={isOrdering}
+                className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl transition-all flex items-center justify-center gap-3 ${
+                  isOrdering ? 'bg-gray-200 text-gray-400' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'
+                }`}
+              >
+                {isOrdering ? <i className="fas fa-spinner fa-spin"></i> : 'Подтвердить заказ'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCheckoutStarted(false)}
+                className="w-full py-3 rounded-2xl font-bold text-sm border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
+              >
+                Изменить корзину
+              </button>
+            </div>
           )}
 
           <div className="mt-6 text-center">
@@ -200,9 +214,9 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
       </div>
 
       {isCheckoutStarted && (
-        <div className="mt-10 bg-white border border-gray-100 rounded-[36px] shadow-sm p-8 lg:p-10">
-          <h2 className="text-2xl font-black text-blue-900 uppercase tracking-tighter mb-6">Данные для оформления</h2>
-          <form id="checkout-form" onSubmit={handleOrder} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="mt-8 sm:mt-10 bg-white border border-gray-100 rounded-3xl sm:rounded-[36px] shadow-sm p-5 sm:p-8 lg:p-10">
+          <h2 className="text-xl sm:text-2xl font-black text-blue-900 uppercase tracking-tighter mb-5 sm:mb-6">Данные для оформления</h2>
+          <form id="checkout-form" onSubmit={handleOrder} noValidate className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
             <div className="space-y-6">
               <div className="rounded-3xl border border-gray-100 p-5 bg-gray-50">
                 <h4 className="text-sm font-black text-blue-900 uppercase tracking-widest mb-3">Способ доставки</h4>
@@ -258,13 +272,13 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               <input
                 type="text"
                 placeholder="Имя (не обязательно)"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 outline-none focus:ring-4 focus:ring-blue-50 transition-all text-sm"
+                className="w-full bg-white border border-gray-200 rounded-2xl px-5 py-3.5 outline-none focus:ring-4 focus:ring-blue-50 transition-all text-sm"
               />
               <input
                 type="tel"
@@ -272,7 +286,7 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
                 required
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 outline-none focus:ring-4 focus:ring-blue-50 transition-all text-sm"
+                className="w-full bg-white border border-gray-200 rounded-2xl px-5 py-3.5 outline-none focus:ring-4 focus:ring-blue-50 transition-all text-sm"
               />
               <input
                 type="email"
@@ -280,18 +294,18 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
                 required
                 value={customerEmail}
                 onChange={(e) => setCustomerEmail(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 outline-none focus:ring-4 focus:ring-blue-50 transition-all text-sm"
+                className="w-full bg-white border border-gray-200 rounded-2xl px-5 py-3.5 outline-none focus:ring-4 focus:ring-blue-50 transition-all text-sm"
               />
               <textarea
                 placeholder="Адрес доставки"
-                className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 outline-none focus:ring-4 focus:ring-blue-50 transition-all h-32 text-sm"
+                className="w-full bg-white border border-gray-200 rounded-2xl px-5 py-3.5 outline-none focus:ring-4 focus:ring-blue-50 transition-all h-28 sm:h-32 text-sm"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
               ></textarea>
 
               <textarea
                 placeholder="Комментарий к заказу"
-                className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 outline-none focus:ring-4 focus:ring-blue-50 transition-all h-24 text-sm"
+                className="w-full bg-white border border-gray-200 rounded-2xl px-5 py-3.5 outline-none focus:ring-4 focus:ring-blue-50 transition-all h-24 text-sm"
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
               ></textarea>
@@ -313,6 +327,29 @@ const CartPage: React.FC<CartPageProps> = ({ cart, removeFromCart, updateQuantit
               <div>{customerPhone}</div>
               <div>{customerEmail}</div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {orderError && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[110] p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0">
+                <i className="fas fa-exclamation"></i>
+              </div>
+              <div>
+                <h4 className="text-lg font-black text-gray-900">Не удалось отправить заказ</h4>
+                <p className="text-sm text-gray-500 mt-1">{orderError}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOrderError('')}
+              className="mt-5 w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors"
+            >
+              Понятно
+            </button>
           </div>
         </div>
       )}

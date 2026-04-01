@@ -20,6 +20,34 @@ const ATTR_LABELS: Record<string, string> = {
 };
 const attrLabel = (key: string) => ATTR_LABELS[key] || key.replace(/_/g, ' ');
 
+const normalizeAttrEntries = (attrs: Record<string, any> = {}) => {
+  const out: Array<[string, string]> = [];
+
+  for (const [rawKey, rawVal] of Object.entries(attrs || {})) {
+    const value = String(rawVal ?? '').trim();
+    if (!value) continue;
+
+    const parts = value.includes(':')
+      ? value.split(',').map((x) => x.trim()).filter(Boolean)
+      : [];
+
+    // Some imports store all characteristics in one string: "Название: значение, ..."
+    if (parts.length > 1 && parts.every((part) => part.includes(':'))) {
+      for (const part of parts) {
+        const idx = part.indexOf(':');
+        const k = part.slice(0, idx).trim();
+        const v = part.slice(idx + 1).trim();
+        if (k && v) out.push([k, v]);
+      }
+      continue;
+    }
+
+    out.push([attrLabel(rawKey), value]);
+  }
+
+  return out;
+};
+
 interface CatalogPageProps {
   categories: Category[];
   onAddToCart: (p: Product) => void;
@@ -87,10 +115,9 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
   const q = searchQuery.trim().toLowerCase();
 
   const formatAttrsInline = (attrs: Record<string, any> = {}, limit = 3) =>
-    Object.entries(attrs)
-      .filter(([, val]) => val !== undefined && val !== null && String(val).trim() !== '')
+    normalizeAttrEntries(attrs)
       .slice(0, limit)
-      .map(([key, val]) => `${attrLabel(key)}: ${String(val).trim()}`)
+      .map(([key, val]) => `${key}: ${val}`)
       .join(', ');
 
   const filteredProducts =
@@ -657,15 +684,15 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                             <div className="text-sm font-bold text-gray-900">{selectedProduct.sku}</div>
                           </div>
                         ) : null}
-                        {Object.entries(selectedProduct.attrs).map(([key, val]) => (
+                        {normalizeAttrEntries((selectedProduct.attrs || {}) as Record<string, any>).map(([key, val], idx) => (
                           <div
-                            key={key}
+                            key={`${key}-${idx}`}
                             className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 hover:border-blue-300 hover:bg-blue-50 transition-all"
                           >
                             <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">
-                              {attrLabel(key)}
+                              {key}
                             </div>
-                            <div className="text-sm font-bold text-gray-900">{String(val)}</div>
+                            <div className="text-sm font-bold text-gray-900 break-words leading-5">{val}</div>
                           </div>
                         ))}
                       </div>
