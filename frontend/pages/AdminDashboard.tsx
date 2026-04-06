@@ -162,6 +162,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
   const [orderLoading, setOrderLoading] = useState(false);
   const [activeOrder, setActiveOrder] = useState<any | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string>('');
+  const [importResult, setImportResult] = useState<{ type: 'success' | 'error'; title: string; details: string } | null>(null);
 
   // Leads
   const [leads, setLeads] = useState<any[]>([]);
@@ -409,12 +410,20 @@ useEffect(() => {
     try {
       const result = await adminImportExcel(token, file, selectedImportSupplier);
       await refreshAll();
-      const durationSec = Number(result?.durationMs || 0) > 0 ? `, время ${Math.round(Number(result.durationMs) / 1000)} сек` : '';
-      alert(`Импорт ${result?.supplier?.title || ''} завершён: распознано ${result.totalParsed}, добавлено ${result.inserted}, обновлено ${result.updated}, пропущено ${result.skipped}${durationSec}`);
+      const durationSec = Number(result?.durationMs || 0) > 0 ? ` · ${Math.round(Number(result.durationMs) / 1000)} сек` : '';
+      setImportResult({
+        type: 'success',
+        title: `Импорт ${result?.supplier?.title || ''} завершён`,
+        details: `Распознано: ${result.totalParsed} · Добавлено: ${result.inserted} · Обновлено: ${result.updated} · Пропущено: ${result.skipped}${durationSec}`,
+      });
       setActiveTab('inventory');
     } catch (error: any) {
       console.error(error);
-      alert(error?.message || 'Ошибка при импорте Excel файла');
+      setImportResult({
+        type: 'error',
+        title: 'Ошибка при импорте',
+        details: error?.message || 'Не удалось обработать файл Excel',
+      });
     } finally {
       setIsImporting(false);
       e.target.value = '';
@@ -2365,6 +2374,32 @@ useEffect(() => {
           </div>
         </div>
       )}
+
+      {importResult ? (
+        <div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4" onClick={() => setImportResult(null)}>
+          <div
+            className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-gray-100 p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-4 mb-5">
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 ${importResult.type === 'success' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>
+                <i className={`fas ${importResult.type === 'success' ? 'fa-check' : 'fa-exclamation-triangle'}`}></i>
+              </div>
+              <div>
+                <div className="text-xl font-black text-blue-900 uppercase tracking-tight leading-tight">{importResult.title}</div>
+                <div className="text-sm text-gray-500 mt-2 leading-relaxed">{importResult.details}</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setImportResult(null)}
+              className={`w-full py-3 rounded-2xl font-black uppercase tracking-widest text-xs transition-all ${importResult.type === 'success' ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-100' : 'bg-red-500 text-white hover:bg-red-600'}`}
+            >
+              Понятно
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

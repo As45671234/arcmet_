@@ -192,8 +192,10 @@ async function extractImagesXlsx(buffer) {
 
       if (fromRow === null) continue;
 
-      const rowZero = (toRow !== null) ? Math.round((fromRow + toRow) / 2) : fromRow;
-      const row1 = rowZero + 1;
+      // Use top-left anchor row (fromRow) — more reliable than midpoint for cell-anchored images
+      const row1 = fromRow + 1;
+      // Also register at midpoint row for floating images that span multiple rows
+      const rowMid = (toRow !== null) ? Math.round((fromRow + toRow) / 2) + 1 : row1;
       const col1 = (fromCol !== null) ? (fromCol + 1) : null;
 
       // a:blip r:embed="rIdX"
@@ -228,12 +230,14 @@ async function extractImagesXlsx(buffer) {
 
       const obj = { buf, ext: safeExt };
 
-      const rowKey = `${sheetName}|${row1}`;
-      if (!map.has(rowKey)) map.set(rowKey, obj);
-
-      if (col1 !== null) {
-        const cellKey = `${sheetName}|${row1}|${col1}`;
-        if (!map.has(cellKey)) map.set(cellKey, obj);
+      // Register at top-anchor row (primary) and midpoint row (secondary)
+      for (const rr of Array.from(new Set([row1, rowMid]))) {
+        const rowKey = `${sheetName}|${rr}`;
+        if (!map.has(rowKey)) map.set(rowKey, obj);
+        if (col1 !== null) {
+          const cellKey = `${sheetName}|${rr}|${col1}`;
+          if (!map.has(cellKey)) map.set(cellKey, obj);
+        }
       }
     }
   }
@@ -429,10 +433,11 @@ async function extractImagesExcelJs(buffer) {
       const toCol = Number.isFinite(br.nativeCol) ? br.nativeCol : fromCol;
       if (fromRow === null || fromCol === null) continue;
 
-      const rowZero = Number.isFinite(toRow) ? Math.round((fromRow + toRow) / 2) : fromRow;
-      const colZero = Number.isFinite(toCol) ? Math.round((fromCol + toCol) / 2) : fromCol;
-      const row1 = rowZero + 1;
-      const col1 = colZero + 1;
+      // Use top-left anchor for primary key; also register midpoint for floating images
+      const row1 = fromRow + 1;
+      const col1 = fromCol + 1;
+      const rowMid = Number.isFinite(toRow) ? Math.round((fromRow + toRow) / 2) + 1 : row1;
+      const colMid = Number.isFinite(toCol) ? Math.round((fromCol + toCol) / 2) + 1 : col1;
 
       const media = mediaById.get(Number(imageRef.imageId));
       if (!media) continue;
@@ -446,10 +451,13 @@ async function extractImagesExcelJs(buffer) {
       const safeExt = ["png", "jpg", "jpeg", "webp", "gif", "bmp"].includes(ext) ? ext : "png";
       const obj = { buf, ext: safeExt };
 
-      const rowKey = `${sheetName}|${row1}`;
-      const cellKey = `${sheetName}|${row1}|${col1}`;
-      if (!map.has(cellKey)) map.set(cellKey, obj);
-      if (!map.has(rowKey)) map.set(rowKey, obj);
+      // Register both top-anchor and midpoint positions
+      for (const [rr, cc] of [[row1, col1], [rowMid, colMid]]) {
+        const rowKey = `${sheetName}|${rr}`;
+        const cellKey = `${sheetName}|${rr}|${cc}`;
+        if (!map.has(cellKey)) map.set(cellKey, obj);
+        if (!map.has(rowKey)) map.set(rowKey, obj);
+      }
     }
   }
 
@@ -566,14 +574,19 @@ function buildHeaderMap(headerRow) {
 
 function looksLikeHeaderRow(row) {
   const joined = row.map((c) => normalizeHeader(c)).join(" | ");
-  return (
-    joined.includes("наименование") ||
-    joined.includes("номенклатур") ||
-    joined.includes("артикул") ||
-    joined.includes("цена") ||
-    joined.includes("ед изм") ||
-    (joined.includes("толщина") && joined.includes("упаков"))
-  );
+
+  const hasName  = joined.includes("наименование") || joined.includes("номенклатур");
+  const hasSku   = joined.includes("артикул");
+  const hasPrice = joined.includes("цена");
+  const hasMeas  = joined.includes("ед изм");
+  const hasQty   = joined.includes("количеств");
+  const hasThickAndPack = joined.includes("толщина") && joined.includes("упаков");
+
+  const score = [hasName, hasSku, hasPrice, hasMeas, hasQty, hasThickAndPack].filter(Boolean).length;
+
+  // Require at least 2 matching keywords to avoid false positives on data rows
+  // that happen to contain "цена" or "артикул" in their description/name
+  return score >= 2;
 }
 
 function looksLikeCategoryTitle(title, currentCategoryTitle) {
@@ -742,7 +755,9 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier }) {
       const nonEmpty = rowNonEmptyCount(row);
 
       // category/group title row (single cell)
-      if (nonEmpty === 1) {
+      // Only treat as group title BEFORE a header is found, or if it truly looks like a category.
+      // Once headerMap is established, a single-cell row could be a product with sparse data — fall through.
+      if (nonEmpty === 1 && !headerMap) {
         const title = String(row.find((c) => String(c || "").trim()) || "").trim();
         if (!supplierMeta && looksLikeCategoryTitle(title, currentCategoryTitle)) {
           currentCategoryTitle = title;
@@ -753,9 +768,20 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier }) {
         }
 
         currentGroup = title;
-        // If group row explicitly mentions a catalog brand/group, reset mode
         rowMode = "normal";
         continue;
+      }
+
+      // After headerMap is found, single-cell rows are still checked as potential group labels
+      // only if they don't look like a product name (i.e. no digits, no Latin chars, very short).
+      if (nonEmpty === 1 && headerMap) {
+        const title = String(row.find((c) => String(c || "").trim()) || "").trim();
+        const looksLikeLabel = title.length < 60 && !/\d/.test(title) && !/[a-zA-Z]{3}/.test(title);
+        if (looksLikeLabel && looksLikeCategoryTitle(title, currentCategoryTitle)) {
+          currentGroup = title;
+          continue;
+        }
+        // Otherwise fall through and try to parse as product (name-only row)
       }
 
       if (looksLikeHeaderRow(row)) {
@@ -817,22 +843,29 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier }) {
         if (saved) images.push(saved);
       }
 
-      if (images.length === 0 && imageColumns.length <= 1) {
-        const embedded = resolveEmbeddedImage({
-          imagesByRow,
-          sheetName,
-          excelRow,
-          columnIndex: headerMap.image,
-          strictColumn: false,
-          sameRowOnly: false,
-          usedKeys: usedImageKeys
-        });
-        const saved = saveEmbeddedImage({
-          imageObj: embedded,
-          imagesDir,
-          baseName: `${sku || name}`
-        });
-        if (saved) images.push(saved);
+      // Fallback: if no images found with strict matching, retry with row/col tolerance (±2)
+      if (images.length === 0) {
+        const fallbackCols = imageColumns.length > 0
+          ? imageColumns
+          : (headerMap.image !== undefined ? [headerMap.image] : [undefined]);
+        for (let fi = 0; fi < fallbackCols.length; fi++) {
+          const fbCol = fallbackCols[fi];
+          const embedded = resolveEmbeddedImage({
+            imagesByRow,
+            sheetName,
+            excelRow,
+            columnIndex: fbCol,
+            strictColumn: false,
+            sameRowOnly: false,
+            usedKeys: usedImageKeys
+          });
+          const saved = saveEmbeddedImage({
+            imageObj: embedded,
+            imagesDir,
+            baseName: `${sku || name}-${fi + 1}`
+          });
+          if (saved) images.push(saved);
+        }
       }
 
       images = uniqueNonEmpty(images);
