@@ -697,28 +697,40 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier }) {
   const isXlsx = filename && String(filename).toLowerCase().endsWith(".xlsx");
   let imagesByRow = new Map();
 
+  const mergeImageMaps = (targetMap, sourceMap) => {
+    if (!sourceMap || typeof sourceMap.forEach !== "function") return;
+    sourceMap.forEach((value, key) => {
+      if (!targetMap.has(key)) targetMap.set(key, value);
+    });
+  };
+
   if (isXlsx) {
+    let richMap = new Map();
+    let excelJsMap = new Map();
+    let zipDrawingMap = new Map();
+
     try {
-      imagesByRow = await extractRichValueImagesXlsx(buffer);
+      richMap = await extractRichValueImagesXlsx(buffer);
     } catch (e) {
-      imagesByRow = new Map();
+      richMap = new Map();
     }
 
-    if (!imagesByRow || imagesByRow.size === 0) {
-      try {
-        imagesByRow = await extractImagesExcelJs(buffer);
-      } catch (e) {
-        imagesByRow = new Map();
-      }
+    try {
+      excelJsMap = await extractImagesExcelJs(buffer);
+    } catch (e) {
+      excelJsMap = new Map();
     }
 
-    if (!imagesByRow || imagesByRow.size === 0) {
-      try {
-        imagesByRow = await extractImagesXlsx(buffer);
-      } catch (e) {
-        imagesByRow = new Map();
-      }
+    try {
+      zipDrawingMap = await extractImagesXlsx(buffer);
+    } catch (e) {
+      zipDrawingMap = new Map();
     }
+
+    // Some files are only partially handled by one parser. Merge all extracted keys.
+    mergeImageMaps(imagesByRow, richMap);
+    mergeImageMaps(imagesByRow, excelJsMap);
+    mergeImageMaps(imagesByRow, zipDrawingMap);
   }
 
 
@@ -730,6 +742,35 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier }) {
     const hasExt = /\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(low);
     if (isUrl || hasExt) return s;
     return "";
+  };
+
+  const extractUrlFromImageFormula = (formula) => {
+    const f = String(formula || "").trim();
+    if (!f) return "";
+
+    // Excel IMAGE("https://...", ...) and localized separators.
+    const m = f.match(/IMAGE\s*\(\s*"([^"]+)"/i) || f.match(/IMAGE\s*\(\s*'([^']+)'/i);
+    return m ? String(m[1] || "").trim() : "";
+  };
+
+  const extractImageUrlFromCell = (wsLocal, excelRow, columnIndex) => {
+    if (columnIndex === undefined || columnIndex === null) return "";
+    if (!wsLocal) return "";
+
+    const cellRef = XLSX.utils.encode_cell({ r: Math.max(0, excelRow - 1), c: Math.max(0, columnIndex) });
+    const cell = wsLocal[cellRef];
+    if (!cell) return "";
+
+    // 1) Formula IMAGE("url")
+    const fromFormula = extractUrlFromImageFormula(cell.f);
+    if (fromFormula) return normalizeImageValue(fromFormula);
+
+    // 2) Hyperlink target
+    const fromLink = String(cell?.l?.Target || "").trim();
+    if (fromLink) return normalizeImageValue(fromLink);
+
+    // 3) Direct cell value string
+    return normalizeImageValue(cell.v);
   };
 
 
@@ -824,6 +865,14 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier }) {
       const usedImageKeys = new Set();
 
       let images = uniqueNonEmpty(imageColumns.map((columnIndex) => normalizeImageValue(row[columnIndex])));
+
+      // Extra fallback: image URLs in formula/hyperlink cells (e.g. IMAGE("https://..."))
+      if (imageColumns.length) {
+        for (const columnIndex of imageColumns) {
+          const fromCell = extractImageUrlFromCell(ws, excelRow, columnIndex);
+          if (fromCell) images.push(fromCell);
+        }
+      }
 
       for (const columnIndex of imageColumns) {
         const embedded = resolveEmbeddedImage({
