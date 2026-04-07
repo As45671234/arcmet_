@@ -20,6 +20,39 @@ const ATTR_LABELS: Record<string, string> = {
 };
 const attrLabel = (key: string) => ATTR_LABELS[key] || key.replace(/_/g, ' ');
 
+const parseInlineSpecPairs = (text: string) => {
+  const src = String(text || '').trim();
+  if (!src) return [] as Array<[string, string]>;
+
+  const result: Array<[string, string]> = [];
+
+  // Prefer semicolon/newline split for Excel-style "Ключ: Значение; ..."
+  const semicolonParts = src.split(/[;\n]+/).map((x) => x.trim()).filter(Boolean);
+  if (semicolonParts.length > 1 && semicolonParts.every((part) => part.includes(':'))) {
+    for (const part of semicolonParts) {
+      const idx = part.indexOf(':');
+      const k = part.slice(0, idx).trim();
+      const v = part.slice(idx + 1).trim();
+      if (k && v) result.push([k, v]);
+    }
+    return result;
+  }
+
+  // Fallback for comma-separated style: "Ключ: Значение, Ключ2: Значение2"
+  const commaParts = src.split(',').map((x) => x.trim()).filter(Boolean);
+  if (commaParts.length > 1 && commaParts.every((part) => part.includes(':'))) {
+    for (const part of commaParts) {
+      const idx = part.indexOf(':');
+      const k = part.slice(0, idx).trim();
+      const v = part.slice(idx + 1).trim();
+      if (k && v) result.push([k, v]);
+    }
+    return result;
+  }
+
+  return result;
+};
+
 const normalizeAttrEntries = (attrs: Record<string, any> = {}) => {
   const out: Array<[string, string]> = [];
 
@@ -27,18 +60,11 @@ const normalizeAttrEntries = (attrs: Record<string, any> = {}) => {
     const value = String(rawVal ?? '').trim();
     if (!value) continue;
 
-    const parts = value.includes(':')
-      ? value.split(',').map((x) => x.trim()).filter(Boolean)
-      : [];
+    const parsedPairs = parseInlineSpecPairs(value);
 
-    // Some imports store all characteristics in one string: "Название: значение, ..."
-    if (parts.length > 1 && parts.every((part) => part.includes(':'))) {
-      for (const part of parts) {
-        const idx = part.indexOf(':');
-        const k = part.slice(0, idx).trim();
-        const v = part.slice(idx + 1).trim();
-        if (k && v) out.push([k, v]);
-      }
+    // Some imports store all characteristics in one string: "Ключ: значение; ..."
+    if (parsedPairs.length > 0) {
+      for (const [k, v] of parsedPairs) out.push([k, v]);
       continue;
     }
 
