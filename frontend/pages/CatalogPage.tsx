@@ -85,6 +85,27 @@ const parseLegacySpecPairs = (text: string) => {
   return out;
 };
 
+const parseLineSeparatedSpecPairs = (text: string) => {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  if (lines.length < 4) return [] as Array<[string, string]>;
+
+  const out: Array<[string, string]> = [];
+  for (let i = 0; i < lines.length - 1; i += 2) {
+    const key = String(lines[i] || '').trim().replace(/[,:;]+$/g, '');
+    const val = String(lines[i + 1] || '').trim();
+    if (!key || !val) continue;
+    // Skip obviously broken pairs where "key" is only numeric.
+    if (!/[A-Za-zА-Яа-яЁё]/.test(key)) continue;
+    out.push([key, val]);
+  }
+
+  return out;
+};
+
 const normalizeAttrEntries = (attrs: Record<string, any> = {}) => {
   const out: Array<[string, string]> = [];
 
@@ -102,6 +123,12 @@ const normalizeAttrEntries = (attrs: Record<string, any> = {}) => {
 
     const keyLow = String(rawKey || '').toLowerCase();
     if (keyLow === 'specs_text' || keyLow.includes('характер')) {
+      const linePairs = parseLineSeparatedSpecPairs(value);
+      if (linePairs.length > 0) {
+        for (const [k, v] of linePairs) out.push([k, v]);
+        continue;
+      }
+
       const legacyPairs = parseLegacySpecPairs(value);
       if (legacyPairs.length > 0) {
         for (const [k, v] of legacyPairs) out.push([k, v]);
