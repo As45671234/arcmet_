@@ -124,6 +124,7 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
   const hasWhatsapp = String(import.meta.env.VITE_WHATSAPP_PHONE || '').replace(/[^\d]/g, '').length > 0;
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedCatId, setSelectedCatId] = useState<string>('');
+  const [selectedSub, setSelectedSub] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedProductImageIndex, setSelectedProductImageIndex] = useState<number>(0);
@@ -132,15 +133,28 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
   const [isZoomed, setIsZoomed] = useState<boolean>(false);
   const [modalTab, setModalTab] = useState<'description' | 'specs'>('description');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [subcategoryPanelOpen, setSubcategoryPanelOpen] = useState<Record<string, boolean>>({});
   const cardTouchStartRef = useRef<Record<string, { x: number; y: number }>>({});
   const modalTouchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const cat = searchParams.get('cat');
+    const sub = searchParams.get('sub') || '';
 
     if (cat) setSelectedCatId(cat);
     else if (categories.length > 0) setSelectedCatId(categories[0].id);
+
+    setSelectedSub(sub);
   }, [searchParams, categories]);
+
+  useEffect(() => {
+    if (!selectedCatId) return;
+    setSubcategoryPanelOpen((prev) => (
+      Object.prototype.hasOwnProperty.call(prev, selectedCatId)
+        ? prev
+        : { ...prev, [selectedCatId]: true }
+    ));
+  }, [selectedCatId]);
 
   useEffect(() => {
     if (!selectedProduct) return;
@@ -184,7 +198,8 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
           (p.sku || '').toLowerCase().includes(q) ||
           attrsInline.includes(q)
         );
-      }) || [];
+      })
+      .filter((p) => !selectedSub || (p.brandOrGroup || '').trim() === selectedSub) || [];
 
   const getProductImages = (product: Product) => {
     const list = [
@@ -260,6 +275,20 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
             <div className="space-y-1">
               {categories.map((cat) => {
                 const isActive = selectedCatId === cat.id;
+                const catSubs = Array.from<string>(
+                  new Set<string>(
+                    cat.items
+                      .map((p) => (p.brandOrGroup || '').trim())
+                      .filter(
+                        (s): s is string =>
+                          !!s &&
+                          s.length <= 40 &&
+                          !/для оформления заказа/i.test(s) &&
+                          !/достаточно отправить запрос/i.test(s)
+                      )
+                  )
+                ).sort((a, b) => a.localeCompare(b, 'ru'));
+                const isSubPanelOpen = subcategoryPanelOpen[cat.id] ?? true;
 
                 return (
                   <div key={cat.id} className="rounded-2xl overflow-hidden">
@@ -274,13 +303,19 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                       <button
                         onClick={() => {
                           setSelectedCatId(cat.id);
+                          setSelectedSub('');
                           setSearchParams({ cat: cat.id });
+                          if (catSubs.length > 0) {
+                            setSubcategoryPanelOpen((prev) => ({ ...prev, [cat.id]: true }));
+                          }
                         }}
                         className="flex min-w-0 flex-1 items-center gap-2 text-left"
                       >
                         <i
                           className={`fas fa-${
-                            isActive ? 'folder-open' : 'folder'
+                            isActive
+                              ? catSubs.length > 0 ? 'folder-open' : 'folder'
+                              : catSubs.length > 0 ? 'folder' : 'tag'
                           } text-xs flex-shrink-0 ${
                             isActive ? 'text-blue-200' : 'text-blue-400'
                           }`}
@@ -294,7 +329,47 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                       >
                         {cat.items.length}
                       </span>
+                      {isActive && catSubs.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setSubcategoryPanelOpen((prev) => ({ ...prev, [cat.id]: !isSubPanelOpen }))}
+                          className={`h-7 w-7 rounded-full flex items-center justify-center transition-colors ${
+                            isActive ? 'bg-white/15 hover:bg-white/25 text-white' : 'bg-blue-50 hover:bg-blue-100 text-blue-600'
+                          }`}
+                          aria-label={isSubPanelOpen ? 'Скрыть подкатегории' : 'Показать подкатегории'}
+                          title={isSubPanelOpen ? 'Скрыть подкатегории' : 'Показать подкатегории'}
+                        >
+                          <i className={`fas fa-chevron-${isSubPanelOpen ? 'up' : 'down'} text-[10px]`}></i>
+                        </button>
+                      ) : null}
                     </div>
+
+                    {/* Subcategory list */}
+                    {isActive && catSubs.length > 0 && isSubPanelOpen && (
+                      <div className="mt-1 mb-1 mx-1 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
+                        {catSubs.map((s) => (
+                          <button
+                            key={s}
+                            onClick={() => {
+                              setSelectedSub(s);
+                              const next = new URLSearchParams(searchParams);
+                              next.set('sub', s);
+                              setSearchParams(next);
+                            }}
+                            className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-3 ${
+                              selectedSub === s
+                                ? 'bg-blue-50 text-blue-700 font-bold'
+                                : 'text-gray-500 hover:bg-white hover:text-gray-800'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors ${
+                              selectedSub === s ? 'bg-blue-600' : 'bg-gray-300'
+                            }`} />
+                            <span className="truncate">{s}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
