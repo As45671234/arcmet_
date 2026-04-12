@@ -72,6 +72,25 @@ function cleanupDirSafe(dirPath) {
   }
 }
 
+function findDuplicateSkusInFile(items) {
+  const skuMap = new Map();
+
+  for (const it of items || []) {
+    const skuRaw = String(it && it.sku ? it.sku : "").trim();
+    if (!skuRaw) continue;
+
+    const norm = skuRaw.toLowerCase();
+    const prev = skuMap.get(norm);
+    if (!prev) {
+      skuMap.set(norm, { sku: skuRaw, count: 1 });
+    } else {
+      prev.count += 1;
+    }
+  }
+
+  return Array.from(skuMap.values()).filter((x) => x.count > 1);
+}
+
 async function upsertImportedProducts(items, supplierMeta) {
   let inserted = 0;
   let updated = 0;
@@ -83,27 +102,9 @@ async function upsertImportedProducts(items, supplierMeta) {
     return ok;
   });
 
-  // De-duplicate products inside one import batch by unique key.
-  // This avoids bulkWrite E11000 when the same SKU/product appears multiple times in one file.
-  const seenBatchKeys = new Set();
-  const uniqueItems = [];
-  for (const it of validItems) {
-    const key = String(it && it.key ? it.key : "").trim();
-    if (!key) {
-      skipped++;
-      continue;
-    }
-    if (seenBatchKeys.has(key)) {
-      skipped++;
-      continue;
-    }
-    seenBatchKeys.add(key);
-    uniqueItems.push(it);
-  }
-
-  const keys = Array.from(new Set(uniqueItems.map((it) => String(it.key)).filter(Boolean)));
-  const skus = Array.from(new Set(uniqueItems.map((it) => String(it.sku || "").trim()).filter(Boolean)));
-  const names = Array.from(new Set(uniqueItems.filter((it) => !String(it.sku || "").trim()).map((it) => String(it.name || "").trim()).filter(Boolean)));
+  const keys = Array.from(new Set(validItems.map((it) => String(it.key)).filter(Boolean)));
+  const skus = Array.from(new Set(validItems.map((it) => String(it.sku || "").trim()).filter(Boolean)));
+  const names = Array.from(new Set(validItems.filter((it) => !String(it.sku || "").trim()).map((it) => String(it.name || "").trim()).filter(Boolean)));
 
   const orQueries = [];
   if (keys.length) orQueries.push({ key: { $in: keys } });
@@ -129,7 +130,7 @@ async function upsertImportedProducts(items, supplierMeta) {
 
   const operations = [];
 
-  for (const it of uniqueItems) {
+  for (const it of validItems) {
     const skuKey = it.sku ? `${it.category_id}|${String(it.sku).trim()}` : "";
     const nameGroupKey = `${it.category_id}|${String(it.name).trim()}|${String(it.brandOrGroup || "").trim()}`;
 
@@ -356,6 +357,18 @@ router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res
       });
     }
 
+    const duplicateSkus = findDuplicateSkusInFile(items);
+    if (duplicateSkus.length) {
+      const details = duplicateSkus
+        .map((d) => `${d.sku} (x${d.count})`)
+        .join(", ");
+      return res.status(400).json({
+        error: "duplicate sku in file",
+        details: `В Excel найдены повторяющиеся артикулы: ${details}. Удалите дубликаты и повторите импорт.`,
+        duplicates: duplicateSkus
+      });
+    }
+
     const { inserted, updated, skipped } = await upsertImportedProducts(items, supplierMeta);
 
     res.json({
@@ -437,6 +450,18 @@ router.post("/import/excel/chunk/:uploadId/complete", requireAdmin, async (req, 
       return res.status(400).json({
         error: "excel template was not recognized",
         details: "Не удалось распознать строки товаров. Проверьте заголовки Excel и перезапустите backend после обновления кода."
+      });
+    }
+
+    const duplicateSkus = findDuplicateSkusInFile(items);
+    if (duplicateSkus.length) {
+      const details = duplicateSkus
+        .map((d) => `${d.sku} (x${d.count})`)
+        .join(", ");
+      return res.status(400).json({
+        error: "duplicate sku in file",
+        details: `В Excel найдены повторяющиеся артикулы: ${details}. Удалите дубликаты и повторите импорт.`,
+        duplicates: duplicateSkus
       });
     }
 
