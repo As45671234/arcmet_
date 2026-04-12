@@ -83,9 +83,27 @@ async function upsertImportedProducts(items, supplierMeta) {
     return ok;
   });
 
-  const keys = Array.from(new Set(validItems.map((it) => String(it.key)).filter(Boolean)));
-  const skus = Array.from(new Set(validItems.map((it) => String(it.sku || "").trim()).filter(Boolean)));
-  const names = Array.from(new Set(validItems.filter((it) => !String(it.sku || "").trim()).map((it) => String(it.name || "").trim()).filter(Boolean)));
+  // De-duplicate products inside one import batch by unique key.
+  // This avoids bulkWrite E11000 when the same SKU/product appears multiple times in one file.
+  const seenBatchKeys = new Set();
+  const uniqueItems = [];
+  for (const it of validItems) {
+    const key = String(it && it.key ? it.key : "").trim();
+    if (!key) {
+      skipped++;
+      continue;
+    }
+    if (seenBatchKeys.has(key)) {
+      skipped++;
+      continue;
+    }
+    seenBatchKeys.add(key);
+    uniqueItems.push(it);
+  }
+
+  const keys = Array.from(new Set(uniqueItems.map((it) => String(it.key)).filter(Boolean)));
+  const skus = Array.from(new Set(uniqueItems.map((it) => String(it.sku || "").trim()).filter(Boolean)));
+  const names = Array.from(new Set(uniqueItems.filter((it) => !String(it.sku || "").trim()).map((it) => String(it.name || "").trim()).filter(Boolean)));
 
   const orQueries = [];
   if (keys.length) orQueries.push({ key: { $in: keys } });
@@ -111,7 +129,7 @@ async function upsertImportedProducts(items, supplierMeta) {
 
   const operations = [];
 
-  for (const it of validItems) {
+  for (const it of uniqueItems) {
     const skuKey = it.sku ? `${it.category_id}|${String(it.sku).trim()}` : "";
     const nameGroupKey = `${it.category_id}|${String(it.name).trim()}|${String(it.brandOrGroup || "").trim()}`;
 
