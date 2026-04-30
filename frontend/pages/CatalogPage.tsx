@@ -279,13 +279,7 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                   new Set<string>(
                     cat.items
                       .map((p) => (p.brandOrGroup || '').trim())
-                      .filter(
-                        (s): s is string =>
-                          !!s &&
-                          s.length <= 40 &&
-                          !/для оформления заказа/i.test(s) &&
-                          !/достаточно отправить запрос/i.test(s)
-                      )
+                      .filter((s): s is string => !!s)
                   )
                 ).sort((a, b) => a.localeCompare(b, 'ru'));
                 const isSubPanelOpen = subcategoryPanelOpen[cat.id] ?? true;
