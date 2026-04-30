@@ -182,6 +182,20 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # Excel import: увеличенный таймаут (обработка файла + JSZip может занять > 60s)
+    location /api/admin/import/ {
+        proxy_pass http://backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 300s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
+        client_max_body_size  20m;
+    }
+
     # API proxy to backend
     location /api/ {
         proxy_pass http://backend;
