@@ -817,7 +817,17 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier }) {
       // only if they don't look like a product name (i.e. no digits, no Latin chars, very short).
       if (nonEmpty === 1 && headerMap) {
         const title = String(row.find((c) => String(c || "").trim()) || "").trim();
-        const looksLikeLabel = title.length < 60 && !/\d/.test(title) && !/[a-zA-Z]{3}/.test(title);
+
+        // ALL-CAPS multi-word rows (e.g. "ПВХ-МЕМБРАНА ДЛЯ КРОВЛИ") are always subcategory headers
+        // regardless of length or supplier context.
+        const lettersOnly = title.replace(/[^\p{L}]+/gu, "");
+        const isAllCapsGroup = lettersOnly.length >= 4 && title === title.toUpperCase() && title.includes(" ") && !/\d/.test(title);
+        if (isAllCapsGroup) {
+          currentGroup = title;
+          continue;
+        }
+
+        const looksLikeLabel = title.length < 80 && !/\d/.test(title) && !/[a-zA-Z]{3}/.test(title);
         if (looksLikeLabel && looksLikeCategoryTitle(title, currentCategoryTitle)) {
           currentGroup = title;
           continue;
