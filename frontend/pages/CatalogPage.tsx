@@ -20,6 +20,12 @@ const ATTR_LABELS: Record<string, string> = {
 };
 const attrLabel = (key: string) => ATTR_LABELS[key] || key.replace(/_/g, ' ');
 
+const normalizeSubcategory = (value: string) =>
+  String(value || '')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
 const parseInlineSpecPairs = (text: string) => {
   const src = String(text || '').trim();
   if (!src) return [] as Array<[string, string]>;
@@ -278,7 +284,7 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                 const catSubs = Array.from<string>(
                   new Set<string>(
                     cat.items
-                      .map((p) => (p.brandOrGroup || '').trim())
+                      .map((p) => normalizeSubcategory(p.brandOrGroup || ''))
                       .filter((s): s is string => !!s)
                   )
                 ).sort((a, b) => a.localeCompare(b, 'ru'));
@@ -340,7 +346,7 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
 
                     {/* Subcategory list */}
                     {isActive && catSubs.length > 0 && isSubPanelOpen && (
-                      <div className="mt-1 mb-1 mx-1 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
+                      <div className="mt-1 mb-1 mx-1 rounded-xl bg-gray-50 border border-gray-100 max-h-64 overflow-y-auto overflow-x-hidden">
                         {catSubs.map((s) => (
                           <button
                             key={s}
