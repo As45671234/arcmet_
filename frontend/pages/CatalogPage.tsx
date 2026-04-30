@@ -476,9 +476,8 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                     ) : null}
                     {product.brandOrGroup &&
                     product.brandOrGroup.trim() &&
-                    product.brandOrGroup.length <= 40 &&
                     !/для оформления заказа/i.test(product.brandOrGroup) ? (
-                      <div className="absolute top-4 left-4 bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-2xl uppercase tracking-widest">
+                      <div className="absolute top-4 left-4 right-4 bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-2xl uppercase tracking-widest leading-tight line-clamp-2">
                         {product.brandOrGroup}
                       </div>
                     ) : null}
