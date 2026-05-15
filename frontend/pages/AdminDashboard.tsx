@@ -1471,18 +1471,12 @@ useEffect(() => {
 
             <form onSubmit={submitCreateCategory} className="mb-8 bg-gray-50 rounded-3xl border border-gray-100 p-6">
               <div className="text-sm font-black text-blue-900 uppercase tracking-widest mb-4">Добавить поставщика</div>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <input
                   className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
                   value={newCategoryForm.title}
                   onChange={(e) => setNewCategoryForm((prev) => ({ ...prev, title: e.target.value }))}
                   placeholder="Название (например, ACME)"
-                />
-                <input
-                  className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
-                  value={newCategoryForm.id}
-                  onChange={(e) => setNewCategoryForm((prev) => ({ ...prev, id: e.target.value }))}
-                  placeholder="ID (опционально, например acme)"
                 />
                 <select
                   className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
@@ -1492,18 +1486,6 @@ useEffect(() => {
                   <option value={1}>Стиль 1 (текущий)</option>
                   <option value={2}>Стиль 2 (с видео)</option>
                 </select>
-                <input
-                  className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
-                  value={newCategoryForm.image}
-                  onChange={(e) => setNewCategoryForm((prev) => ({ ...prev, image: e.target.value }))}
-                  placeholder="URL изображения (опционально)"
-                />
-                <input
-                  className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
-                  value={newCategoryForm.videoUrl}
-                  onChange={(e) => setNewCategoryForm((prev) => ({ ...prev, videoUrl: e.target.value }))}
-                  placeholder="URL видео (для стиля 2)"
-                />
               </div>
               <div className="mt-4">
                 <button
@@ -1516,15 +1498,23 @@ useEffect(() => {
               </div>
             </form>
 
-            {adminCategories.length === 0 ? (
-              <div className="p-16 text-center bg-gray-50 rounded-3xl border border-gray-100">
-                <div className="text-gray-400 text-4xl mb-4"><i className="fas fa-images"></i></div>
-                <div className="font-bold text-gray-700">Категории не найдены</div>
-                <div className="text-sm text-gray-500 mt-2">Создайте поставщика вручную или импортируйте товары.</div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {adminCategories.map((cat: any) => {
+            {(() => {
+              const apiIds = new Set(adminCategories.map((c: any) => String(c.id || '')));
+              const displayedCategories: any[] = [
+                ...adminCategories,
+                ...IMPORT_SUPPLIERS
+                  .filter((s) => !apiIds.has(s.id))
+                  .map((s) => ({ id: s.id, title: s.title, items: [], image: '', styleVariant: 1, videoUrl: '' })),
+              ];
+              return displayedCategories.length === 0 ? (
+                <div className="p-16 text-center bg-gray-50 rounded-3xl border border-gray-100">
+                  <div className="text-gray-400 text-4xl mb-4"><i className="fas fa-images"></i></div>
+                  <div className="font-bold text-gray-700">Категории не найдены</div>
+                  <div className="text-sm text-gray-500 mt-2">Создайте поставщика вручную или импортируйте товары.</div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {displayedCategories.map((cat: any) => {
                   const catId = String(cat.id || "");
                   const titleDraft = categoryTitleDrafts[catId] ?? String(cat.title || catId);
                   const styleDraft = categoryStyleDrafts[catId] ?? (Number(cat.styleVariant) === 2 ? 2 : 1);
@@ -1636,7 +1626,8 @@ useEffect(() => {
                   );
                 })}
               </div>
-            )}
+              );
+            })()}
           </div>
         ) : activeTab === 'constructor' ? (
           <div className="p-10 space-y-8">
