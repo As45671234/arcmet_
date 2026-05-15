@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Category, HomepageImages, SiteSettings } from '../types';
-import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage, adminPatchCategory, adminCreateCategory, adminDeleteCategory, adminPurgeAll, adminGetSiteSettings, adminSaveSiteSettings, adminUploadImage, adminUploadCategoryVideo } from '../services/api';
+import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage, adminPatchCategory, adminCreateCategory, adminDeleteCategory, adminPurgeAll, adminGetSiteSettings, adminSaveSiteSettings, adminUploadImage, adminUploadCategoryVideo, adminFetchCategories } from '../services/api';
 import { IMPORT_SUPPLIERS } from '../constants';
 import { DEFAULT_HOMEPAGE_IMAGES } from '../homepageDefaults';
 import { normalizeAssetUrl } from '../utils/assetUrl';
@@ -337,8 +337,51 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
   };
 
   const refreshAdmin = async () => {
-    const data = await fetchAdminCatalog(token);
-    setAdminCategories(data.categories as any);
+    const [catalogData, metaData] = await Promise.all([
+      fetchAdminCatalog(token),
+      adminFetchCategories(token).catch(() => ({ categories: [] as any[] })),
+    ]);
+
+    const metaMap = new Map(
+      (metaData.categories || []).map((cat: any) => [
+        String(cat.id || ''),
+        {
+          title: String(cat.title || ''),
+          styleVariant: Number(cat.styleVariant) === 2 ? 2 : 1,
+          videoUrl: String(cat.videoUrl || '').trim(),
+          productsCount: Number(cat.productsCount || 0),
+        },
+      ])
+    );
+
+    const merged = (catalogData.categories || []).map((cat: any) => {
+      const id = String(cat.id || '');
+      const meta = metaMap.get(id);
+      if (!meta) return cat;
+      return {
+        ...cat,
+        title: meta.title || cat.title,
+        styleVariant: meta.styleVariant,
+        videoUrl: meta.videoUrl,
+        productsCount: Number((cat.items || []).length || meta.productsCount || 0),
+      };
+    });
+
+    for (const [id, meta] of metaMap.entries()) {
+      if (merged.some((cat: any) => String(cat.id || '') === id)) continue;
+      merged.push({
+        id,
+        title: meta.title || id,
+        fields: [],
+        items: [],
+        image: '',
+        styleVariant: meta.styleVariant,
+        videoUrl: meta.videoUrl,
+        productsCount: meta.productsCount || 0,
+      });
+    }
+
+    setAdminCategories(merged as any);
   };
 
   const refreshPublic = async () => {
@@ -676,7 +719,10 @@ useEffect(() => {
   };
 
   const saveCategoryMeta = async (catId: string) => {
-    if (!token) return;
+    if (!token) {
+      alert('Сессия администратора истекла. Войдите заново.');
+      return;
+    }
     const title = String(categoryTitleDrafts[catId] || '').trim() || catId;
     const styleVariant = Number(categoryStyleDrafts[catId]) === 2 ? 2 : 1;
     const videoUrl = String(categoryVideoDrafts[catId] || '').trim();
@@ -706,7 +752,11 @@ useEffect(() => {
   };
 
   const uploadCategoryVideo = async (catId: string, file?: File | null) => {
-    if (!file || !token) return;
+    if (!file) return;
+    if (!token) {
+      alert('Сессия администратора истекла. Войдите заново.');
+      return;
+    }
     setCategoryVideoUploading((prev) => ({ ...prev, [catId]: true }));
     try {
       const res = await adminUploadCategoryVideo(token, file);
@@ -727,7 +777,10 @@ useEffect(() => {
 
   const submitCreateCategory = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!token) return;
+    if (!token) {
+      alert('Сессия администратора истекла. Войдите заново.');
+      return;
+    }
 
     const title = String(newCategoryForm.title || '').trim();
     if (!title) {
