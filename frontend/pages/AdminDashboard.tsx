@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Category, HomepageImages, SiteSettings } from '../types';
-import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage, adminPatchCategory, adminCreateCategory, adminDeleteCategory, adminPurgeAll, adminGetSiteSettings, adminSaveSiteSettings, adminUploadImage } from '../services/api';
+import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage, adminPatchCategory, adminCreateCategory, adminDeleteCategory, adminPurgeAll, adminGetSiteSettings, adminSaveSiteSettings, adminUploadImage, adminUploadCategoryVideo } from '../services/api';
 import { IMPORT_SUPPLIERS } from '../constants';
 import { DEFAULT_HOMEPAGE_IMAGES } from '../homepageDefaults';
 import { normalizeAssetUrl } from '../utils/assetUrl';
@@ -142,20 +142,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
   const token = getAdminToken();
   const [addImageUploading, setAddImageUploading] = useState(false);
   const [editImageUploading, setEditImageUploading] = useState(false);
-  const [categoryImageUploading, setCategoryImageUploading] = useState<Record<string, boolean>>({});
+  const [categoryVideoUploading, setCategoryVideoUploading] = useState<Record<string, boolean>>({});
   const [categoryImageSaving, setCategoryImageSaving] = useState<Record<string, boolean>>({});
-  const [categoryImageDrafts, setCategoryImageDrafts] = useState<Record<string, string>>({});
   const [categoryTitleDrafts, setCategoryTitleDrafts] = useState<Record<string, string>>({});
   const [categoryStyleDrafts, setCategoryStyleDrafts] = useState<Record<string, 1 | 2>>({});
   const [categoryVideoDrafts, setCategoryVideoDrafts] = useState<Record<string, string>>({});
   const [categoryDeleting, setCategoryDeleting] = useState<Record<string, boolean>>({});
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [newCategoryForm, setNewCategoryForm] = useState({
-    id: '',
     title: '',
-    image: '',
     styleVariant: 1 as 1 | 2,
-    videoUrl: '',
   });
   const [constructorLoading, setConstructorLoading] = useState(false);
   const [constructorSaving, setConstructorSaving] = useState(false);
@@ -351,7 +347,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
   };
 
   const refreshAll = async () => {
-    await Promise.allSettled([refreshAdmin(), refreshPublic()]);
+    await refreshAdmin();
+    try {
+      await refreshPublic();
+    } catch (_) {
+      // Public catalog refresh is secondary for admin edits.
+    }
   };
 
   const loadSiteSettings = async () => {
@@ -394,19 +395,6 @@ useEffect(() => {
   useEffect(() => { setInvPage(1); }, [searchTerm]);
 
   useEffect(() => {
-    setCategoryImageDrafts((prev) => {
-      const next = { ...prev };
-      adminCategories.forEach((cat: any) => {
-        const id = String(cat.id || "");
-        if (!id) return;
-        if (next[id] === undefined || next[id] === "") {
-          const fallback = String((cat.items || []).find((it: any) => it?.image)?.image || "");
-          next[id] = String(cat.image || "") || fallback;
-        }
-      });
-      return next;
-    });
-
     setCategoryTitleDrafts((prev) => {
       const next = { ...prev };
       adminCategories.forEach((cat: any) => {
@@ -689,13 +677,26 @@ useEffect(() => {
 
   const saveCategoryMeta = async (catId: string) => {
     if (!token) return;
-    const image = String(categoryImageDrafts[catId] || '');
     const title = String(categoryTitleDrafts[catId] || '').trim() || catId;
     const styleVariant = Number(categoryStyleDrafts[catId]) === 2 ? 2 : 1;
     const videoUrl = String(categoryVideoDrafts[catId] || '').trim();
     setCategoryImageSaving((prev) => ({ ...prev, [catId]: true }));
     try {
-      await adminPatchCategory(token, catId, { image, title, styleVariant, videoUrl });
+      const res = await adminPatchCategory(token, catId, { title, styleVariant, videoUrl });
+      const saved = res?.category;
+      if (saved) {
+        setAdminCategories((prev) => {
+          const exists = prev.some((c: any) => String(c.id || '') === catId);
+          if (!exists) {
+            return [...prev, { id: catId, title: saved.title || title, styleVariant, videoUrl, items: [], productsCount: 0 } as any];
+          }
+          return prev.map((c: any) => (
+            String(c.id || '') === catId
+              ? { ...c, title: saved.title || title, styleVariant, videoUrl: saved.videoUrl || videoUrl }
+              : c
+          ));
+        });
+      }
       await refreshAll();
     } catch (e: any) {
       alert(e?.message || "Ошибка сохранения категории");
@@ -704,24 +705,23 @@ useEffect(() => {
     }
   };
 
-  const uploadCategoryImage = async (catId: string, file?: File | null) => {
+  const uploadCategoryVideo = async (catId: string, file?: File | null) => {
     if (!file || !token) return;
-    setCategoryImageUploading((prev) => ({ ...prev, [catId]: true }));
+    setCategoryVideoUploading((prev) => ({ ...prev, [catId]: true }));
     try {
-      const res = await adminUploadProductImage(token, file);
-      const imageUrl = String(res.imageUrl || "");
-      setCategoryImageDrafts((prev) => ({ ...prev, [catId]: imageUrl }));
+      const res = await adminUploadCategoryVideo(token, file);
+      const uploadedUrl = String(res.videoUrl || '').trim();
+      setCategoryVideoDrafts((prev) => ({ ...prev, [catId]: uploadedUrl }));
       await adminPatchCategory(token, catId, {
-        image: imageUrl,
         title: String(categoryTitleDrafts[catId] || '').trim() || catId,
         styleVariant: Number(categoryStyleDrafts[catId]) === 2 ? 2 : 1,
-        videoUrl: String(categoryVideoDrafts[catId] || '').trim(),
+        videoUrl: uploadedUrl,
       });
       await refreshAll();
     } catch (e: any) {
-      alert(e?.message || "Ошибка загрузки изображения");
+      alert(e?.message || "Ошибка загрузки видео");
     } finally {
-      setCategoryImageUploading((prev) => ({ ...prev, [catId]: false }));
+      setCategoryVideoUploading((prev) => ({ ...prev, [catId]: false }));
     }
   };
 
@@ -730,22 +730,18 @@ useEffect(() => {
     if (!token) return;
 
     const title = String(newCategoryForm.title || '').trim();
-    const id = String(newCategoryForm.id || '').trim();
-    if (!title && !id) {
-      alert('Введите название или ID категории');
+    if (!title) {
+      alert('Введите название категории');
       return;
     }
 
     setCreatingCategory(true);
     try {
       await adminCreateCategory(token, {
-        id,
         title,
-        image: String(newCategoryForm.image || '').trim(),
         styleVariant: Number(newCategoryForm.styleVariant) === 2 ? 2 : 1,
-        videoUrl: String(newCategoryForm.videoUrl || '').trim(),
       });
-      setNewCategoryForm({ id: '', title: '', image: '', styleVariant: 1, videoUrl: '' });
+      setNewCategoryForm({ title: '', styleVariant: 1 });
       await refreshAll();
     } catch (e: any) {
       alert(e?.message || 'Ошибка создания категории');
@@ -1519,10 +1515,7 @@ useEffect(() => {
                   const titleDraft = categoryTitleDrafts[catId] ?? String(cat.title || catId);
                   const styleDraft = categoryStyleDrafts[catId] ?? (Number(cat.styleVariant) === 2 ? 2 : 1);
                   const videoDraft = categoryVideoDrafts[catId] ?? String(cat.videoUrl || '');
-                  const draft = categoryImageDrafts[catId] ?? "";
-                  const fallback = String((cat.items || []).find((it: any) => it?.image)?.image || "");
-                  const previewSrc = draft || String(cat.image || "") || fallback;
-                  const isUploading = !!categoryImageUploading[catId];
+                  const isUploading = !!categoryVideoUploading[catId];
                   const isSaving = !!categoryImageSaving[catId];
                   const isDeleting = !!categoryDeleting[catId];
                   const productsCount = Number((cat.items || []).length || cat.productsCount || 0);
@@ -1607,10 +1600,25 @@ useEffect(() => {
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-3">
+                          <label className={`inline-flex items-center gap-2 px-4 py-3 rounded-2xl border text-xs font-black uppercase tracking-widest ${isUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50 cursor-pointer'}`}>
+                            <i className={`fas ${isUploading ? 'fa-spinner fa-spin' : 'fa-video'}`}></i>
+                            {isUploading ? 'Загрузка...' : 'Загрузить видео'}
+                            <input
+                              type="file"
+                              accept="video/mp4,video/webm,video/ogg"
+                              className="hidden"
+                              disabled={isUploading}
+                              onChange={(e) => {
+                                uploadCategoryVideo(catId, e.target.files?.[0]);
+                                e.currentTarget.value = '';
+                              }}
+                            />
+                          </label>
+
                           <button
                             type="button"
                             onClick={() => saveCategoryMeta(catId)}
-                            disabled={isSaving}
+                            disabled={isSaving || isUploading}
                             className={`px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs ${isSaving ? 'bg-gray-100 text-gray-400' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700'}`}
                           >
                             {isSaving ? 'Сохранение...' : 'Сохранить'}

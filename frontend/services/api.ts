@@ -149,6 +149,28 @@ export async function adminUploadProductImage(token: string, file: File) {
   return res.json() as Promise<{ ok: boolean; imageUrl: string }>;
 }
 
+export async function adminUploadCategoryVideo(token: string, file: File) {
+  const fd = new FormData();
+  fd.append('file', file);
+
+  const res = await fetch('/api/admin/upload/category-video', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: fd,
+  });
+
+  if (!res.ok) {
+    let msg = 'Ошибка загрузки видео';
+    try {
+      const data = await res.json();
+      msg = data?.error || msg;
+    } catch {}
+    throw new Error(msg);
+  }
+
+  return res.json() as Promise<{ ok: boolean; videoUrl: string }>;
+}
+
 export async function adminFetchCategories(token: string) {
   return request<{ categories: any[] }>('/api/admin/categories', {
     headers: { Authorization: `Bearer ${token}` },

@@ -24,6 +24,8 @@ const upload = multer({
 });
 const productImagesDir = path.join(__dirname, "..", "..", "uploads", "products");
 fs.mkdirSync(productImagesDir, { recursive: true });
+const categoryVideosDir = path.join(__dirname, "..", "..", "uploads", "category-videos");
+fs.mkdirSync(categoryVideosDir, { recursive: true });
 const importChunksDir = path.join(__dirname, "..", "..", "uploads", "import-chunks");
 fs.mkdirSync(importChunksDir, { recursive: true });
 
@@ -37,6 +39,18 @@ const imageUpload = multer({
     },
   }),
   limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+const videoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_, __, cb) => cb(null, categoryVideosDir),
+    filename: (_, file, cb) => {
+      const ext = path.extname(String(file.originalname || "")).toLowerCase();
+      const safeExt = [".mp4", ".webm", ".ogg"].includes(ext) ? ext : ".mp4";
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
+    },
+  }),
+  limits: { fileSize: 250 * 1024 * 1024 },
 });
 
 function uploadSingle(field) {
@@ -607,6 +621,33 @@ router.post("/upload/product-image", requireAdmin, (req, res) => {
     if (!req.file) return res.status(400).json({ error: "file is required" });
     const imageUrl = `/uploads/products/${req.file.filename}`;
     return res.json({ ok: true, imageUrl });
+  });
+});
+
+router.post("/upload/category-video", requireAdmin, (req, res) => {
+  videoUpload.single("file")(req, res, (err) => {
+    if (err && err.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({ error: "file too large" });
+    }
+    if (err) {
+      return res.status(400).json({ error: "upload failed", details: String(err.message || err) });
+    }
+
+    if (!req.file) return res.status(400).json({ error: "file is required" });
+
+    const ext = path.extname(String(req.file.filename || "")).toLowerCase();
+    const allowedExt = [".mp4", ".webm", ".ogg"];
+    if (!allowedExt.includes(ext)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (_) {
+        // noop
+      }
+      return res.status(400).json({ error: "unsupported video format (use mp4/webm/ogg)" });
+    }
+
+    const videoUrl = `/uploads/category-videos/${req.file.filename}`;
+    return res.json({ ok: true, videoUrl });
   });
 });
 
