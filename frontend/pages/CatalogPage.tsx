@@ -26,7 +26,11 @@ const normalizeSubcategory = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const isEmbeddableVideo = (value: string) => /^https?:\/\//i.test(String(value || '').trim());
+const isEmbeddableVideo = (value: string) => {
+  const src = String(value || '').trim();
+  if (!src) return false;
+  return /^https?:\/\//i.test(src) || src.startsWith('/uploads/') || src.startsWith('/api/uploads/');
+};
 
 const toEmbedUrl = (raw: string) => {
   const src = String(raw || '').trim();

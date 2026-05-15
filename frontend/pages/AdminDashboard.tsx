@@ -1578,7 +1578,7 @@ useEffect(() => {
                     if (!v) return '';
                     const yt = v.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?/]+)/i);
                     if (yt) return `https://www.youtube.com/embed/${yt[1]}?rel=0&modestbranding=1`;
-                    if (/^https?:\/\//i.test(v)) return v;
+                    if (/^https?:\/\//i.test(v) || v.startsWith('/uploads/') || v.startsWith('/api/uploads/')) return v;
                     return '';
                   })();
                   const isDirectVideo = /\.(mp4|webm|ogg)(\?.*)?$/i.test(videoDraft.trim());
