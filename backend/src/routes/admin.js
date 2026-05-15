@@ -638,6 +638,7 @@ router.post("/upload/category-video", requireAdmin, (req, res) => {
       return res.status(413).json({ error: `file too large (max ${videoUploadMaxMb}MB)` });
     }
     if (err) {
+      console.error("upload/category-video error:", err);
       return res.status(400).json({ error: "upload failed", details: String(err.message || err) });
     }
 

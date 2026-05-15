@@ -172,7 +172,7 @@ export async function adminUploadCategoryVideo(token: string, file: File) {
     let msg = `Ошибка загрузки видео (${res.status})`;
     try {
       const data = await res.json();
-      msg = data?.error || data?.details || msg;
+      msg = data?.details || data?.error || msg;
     } catch {}
     throw new Error(msg);
   }
