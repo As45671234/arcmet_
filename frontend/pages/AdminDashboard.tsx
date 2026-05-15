@@ -1527,20 +1527,49 @@ useEffect(() => {
                   const isDeleting = !!categoryDeleting[catId];
                   const productsCount = Number((cat.items || []).length || cat.productsCount || 0);
 
+                  const videoPreviewUrl = (() => {
+                    const v = videoDraft.trim();
+                    if (!v) return '';
+                    const yt = v.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?/]+)/i);
+                    if (yt) return `https://www.youtube.com/embed/${yt[1]}?rel=0&modestbranding=1`;
+                    if (/^https?:\/\//i.test(v)) return v;
+                    return '';
+                  })();
+                  const isDirectVideo = /\.(mp4|webm|ogg)(\?.*)?$/i.test(videoDraft.trim());
+
                   return (
                     <div key={catId} className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
-                      <div className="aspect-[16/9] rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 mb-4">
-                        {previewSrc ? (
-                          <img src={previewSrc} alt={titleDraft} className="w-full h-full object-cover" />
-                        ) : null}
-                      </div>
-
                       <div className="flex items-center justify-between gap-4 mb-4">
                         <div>
                           <div className="text-lg font-black text-blue-900">{titleDraft || "Без названия"}</div>
                           <div className="text-xs text-gray-400">{catId} · Товаров: {productsCount}</div>
                         </div>
                       </div>
+
+                      {videoPreviewUrl && (
+                        <div className="aspect-video rounded-2xl overflow-hidden bg-gray-100 border border-gray-100 mb-4">
+                          {isDirectVideo ? (
+                            <video
+                              key={videoPreviewUrl}
+                              className="w-full h-full object-cover"
+                              src={videoPreviewUrl}
+                              controls
+                              playsInline
+                              preload="auto"
+                            />
+                          ) : (
+                            <iframe
+                              key={videoPreviewUrl}
+                              src={videoPreviewUrl}
+                              className="w-full h-full"
+                              loading="lazy"
+                              title={titleDraft}
+                              allow="autoplay; encrypted-media; picture-in-picture"
+                              allowFullScreen
+                            />
+                          )}
+                        </div>
+                      )}
 
                       <div className="space-y-3">
                         <div>
@@ -1561,7 +1590,7 @@ useEffect(() => {
                               value={styleDraft}
                               onChange={(e) => setCategoryStyleDrafts((prev) => ({ ...prev, [catId]: Number(e.target.value) === 2 ? 2 : 1 }))}
                             >
-                              <option value={1}>Стиль 1 (как сейчас)</option>
+                              <option value={1}>Стиль 1 (стандартный)</option>
                               <option value={2}>Стиль 2 (с видео)</option>
                             </select>
                           </div>
@@ -1572,42 +1601,17 @@ useEffect(() => {
                               className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
                               value={videoDraft}
                               onChange={(e) => setCategoryVideoDrafts((prev) => ({ ...prev, [catId]: e.target.value }))}
-                              placeholder="https://..."
+                              placeholder="https://youtube.com/watch?v=... или https://.../video.mp4"
                             />
                           </div>
                         </div>
 
-                        <div>
-                          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Изображение (URL)</div>
-                          <input
-                            className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
-                            value={draft}
-                            onChange={(e) => setCategoryImageDrafts((prev) => ({ ...prev, [catId]: e.target.value }))}
-                            placeholder="https://..."
-                          />
-                        </div>
-
                         <div className="flex flex-col sm:flex-row gap-3">
-                          <label className={`inline-flex items-center gap-2 px-4 py-3 rounded-2xl border text-xs font-black uppercase tracking-widest ${isUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50 cursor-pointer'}`}>
-                            <i className={`fas ${isUploading ? 'fa-spinner fa-spin' : 'fa-upload'}`}></i>
-                            {isUploading ? 'Загрузка...' : 'Выбрать файл'}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              disabled={isUploading}
-                              onChange={(e) => {
-                                uploadCategoryImage(catId, e.target.files?.[0]);
-                                e.currentTarget.value = '';
-                              }}
-                            />
-                          </label>
-
                           <button
                             type="button"
                             onClick={() => saveCategoryMeta(catId)}
-                            disabled={isSaving || isUploading}
-                            className={`px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs ${isSaving || isUploading ? 'bg-gray-100 text-gray-400' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700'}`}
+                            disabled={isSaving}
+                            className={`px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs ${isSaving ? 'bg-gray-100 text-gray-400' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700'}`}
                           >
                             {isSaving ? 'Сохранение...' : 'Сохранить'}
                           </button>

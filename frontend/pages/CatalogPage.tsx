@@ -33,10 +33,9 @@ const toEmbedUrl = (raw: string) => {
   if (!src) return '';
 
   const ytMatch = src.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?/]+)/i);
-  if (ytMatch && ytMatch[1]) return `https://www.youtube.com/embed/${ytMatch[1]}`;
-
-  const vkMatch = src.match(/vkvideo\.ru\/video[-_0-9]+/i);
-  if (vkMatch) return src;
+  if (ytMatch && ytMatch[1]) {
+    return `https://www.youtube.com/embed/${ytMatch[1]}?rel=0&modestbranding=1&playsinline=1`;
+  }
 
   return src;
 };
@@ -445,18 +444,22 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                   <div className="aspect-video bg-gray-100">
                     {String(activeCategory?.videoUrl || '').match(/\.(mp4|webm|ogg)(\?.*)?$/i) ? (
                       <video
+                        key={String(activeCategory?.videoUrl || '')}
                         className="w-full h-full object-cover"
                         src={String(activeCategory?.videoUrl || '')}
                         controls
                         playsInline
+                        preload="auto"
+                        autoPlay={false}
                       />
                     ) : (
                       <iframe
+                        key={String(activeCategory?.videoUrl || '')}
                         src={toEmbedUrl(String(activeCategory?.videoUrl || ''))}
                         className="w-full h-full"
-                        loading="lazy"
+                        loading="eager"
                         title={`${activeCategory?.title || 'Категория'} видео`}
-                        allow="autoplay; encrypted-media; picture-in-picture"
+                        allow="autoplay; encrypted-media; picture-in-picture; web-share"
                         allowFullScreen
                       />
                     )}
