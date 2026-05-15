@@ -33,7 +33,10 @@ fs.mkdirSync(importChunksDir, { recursive: true });
 
 const imageUpload = multer({
   storage: multer.diskStorage({
-    destination: (_, __, cb) => cb(null, productImagesDir),
+    destination: (_, __, cb) => {
+      fs.mkdirSync(productImagesDir, { recursive: true });
+      cb(null, productImagesDir);
+    },
     filename: (_, file, cb) => {
       const ext = path.extname(String(file.originalname || "")).toLowerCase();
       const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"].includes(ext) ? ext : ".jpg";
@@ -45,7 +48,10 @@ const imageUpload = multer({
 
 const videoUpload = multer({
   storage: multer.diskStorage({
-    destination: (_, __, cb) => cb(null, categoryVideosDir),
+    destination: (_, __, cb) => {
+      fs.mkdirSync(categoryVideosDir, { recursive: true });
+      cb(null, categoryVideosDir);
+    },
     filename: (_, file, cb) => {
       const ext = path.extname(String(file.originalname || "")).toLowerCase();
       const safeExt = [".mp4", ".webm", ".ogg"].includes(ext) ? ext : ".mp4";
