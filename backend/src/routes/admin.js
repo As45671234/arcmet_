@@ -363,47 +363,53 @@ router.get("/categories", requireAdmin, async (req, res) => {
 });
 
 router.patch("/categories/:id", requireAdmin, async (req, res) => {
-  const id = String(req.params.id || "").trim();
-  if (!id) return res.status(400).json({ error: "category id required" });
+  try {
+    const id = String(req.params.id || "").trim();
+    if (!id) return res.status(400).json({ error: "category id required" });
 
-  const image = req.body?.image;
-  const title = req.body?.title;
-  const styleVariantRaw = req.body?.styleVariant;
-  const videoUrl = req.body?.videoUrl;
+    const image = req.body?.image;
+    const title = req.body?.title;
+    const styleVariantRaw = req.body?.styleVariant;
+    const videoUrl = req.body?.videoUrl;
 
-  const update = { category_id: id };
-  if (image !== undefined) update.image = String(image || "");
-  if (title !== undefined) update.title = String(title || "");
-  if (styleVariantRaw !== undefined) {
-    const sv = Number(styleVariantRaw) === 2 ? 2 : 1;
-    update.styleVariant = sv;
-  }
-  if (videoUrl !== undefined) update.videoUrl = String(videoUrl || "").trim();
-
-  const saved = await CategoryMeta.findOneAndUpdate(
-    { category_id: id },
-    { $set: update },
-    { upsert: true, new: true }
-  ).lean();
-
-  if (title !== undefined) {
-    const normalizedTitle = String(title || "").trim();
-    await Product.updateMany(
-      { category_id: id },
-      { $set: { category_title: normalizedTitle, supplier_title: normalizedTitle } }
-    );
-  }
-
-  res.json({
-    ok: true,
-    category: {
-      id: saved.category_id,
-      title: saved.title || "",
-      image: normalizeImageUrl(saved.image),
-      styleVariant: Number(saved.styleVariant) === 2 ? 2 : 1,
-      videoUrl: String(saved.videoUrl || "").trim()
+    const update = {};
+    if (image !== undefined) update.image = String(image || "");
+    if (title !== undefined) update.title = String(title || "");
+    if (styleVariantRaw !== undefined) {
+      update.styleVariant = Number(styleVariantRaw) === 2 ? 2 : 1;
     }
-  });
+    if (videoUrl !== undefined) update.videoUrl = String(videoUrl || "").trim();
+
+    const saved = await CategoryMeta.findOneAndUpdate(
+      { category_id: id },
+      { $set: update },
+      { upsert: true, new: true, setDefaultsOnInsert: true, returnDocument: "after" }
+    ).lean();
+
+    if (!saved) return res.status(500).json({ error: "failed to save category meta" });
+
+    if (title !== undefined) {
+      const normalizedTitle = String(title || "").trim();
+      await Product.updateMany(
+        { category_id: id },
+        { $set: { category_title: normalizedTitle, supplier_title: normalizedTitle } }
+      );
+    }
+
+    res.json({
+      ok: true,
+      category: {
+        id: id,
+        title: String(saved.title || ""),
+        image: normalizeImageUrl(saved.image || ""),
+        styleVariant: Number(saved.styleVariant) === 2 ? 2 : 1,
+        videoUrl: String(saved.videoUrl || "").trim()
+      }
+    });
+  } catch (e) {
+    console.error("PATCH /categories/:id error:", e);
+    res.status(500).json({ error: "failed to save category meta", details: String(e && e.message ? e.message : e) });
+  }
 });
 
 router.post("/categories", requireAdmin, async (req, res) => {
