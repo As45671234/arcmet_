@@ -17,16 +17,17 @@ const { slugify, getImportSupplier, buildProductKey, normalizeImageUrl, normaliz
 
 const router = express.Router();
 
+const uploadsRoot = path.resolve(process.env.UPLOADS_DIR || path.join(__dirname, "..", "..", "uploads"));
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 60 * 1024 * 1024 }
 });
-const productImagesDir = path.join(__dirname, "..", "..", "uploads", "products");
+const productImagesDir = path.join(uploadsRoot, "products");
 fs.mkdirSync(productImagesDir, { recursive: true });
-const categoryVideosDir = path.join(__dirname, "..", "..", "uploads", "category-videos");
+const categoryVideosDir = path.join(uploadsRoot, "category-videos");
 fs.mkdirSync(categoryVideosDir, { recursive: true });
-const importChunksDir = path.join(__dirname, "..", "..", "uploads", "import-chunks");
+const importChunksDir = path.join(uploadsRoot, "import-chunks");
 fs.mkdirSync(importChunksDir, { recursive: true });
 
 const imageUpload = multer({

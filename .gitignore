@@ -6,6 +6,8 @@ frontend/node_modules/
 # Uploaded files (managed on server, not in git)
 backend/uploads/products/
 backend/uploads/import-chunks/
+backend/uploads/category-videos/
+backend/test-video.mp4
 
 # IDE
 .vscode/
