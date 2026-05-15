@@ -18,6 +18,7 @@ const { slugify, getImportSupplier, buildProductKey, normalizeImageUrl, normaliz
 const router = express.Router();
 
 const uploadsRoot = path.resolve(process.env.UPLOADS_DIR || path.join(__dirname, "..", "..", "uploads"));
+const videoUploadMaxMb = Math.max(50, Number(process.env.VIDEO_UPLOAD_MAX_MB || 250));
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -51,7 +52,7 @@ const videoUpload = multer({
       cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
     },
   }),
-  limits: { fileSize: 250 * 1024 * 1024 },
+  limits: { fileSize: Math.floor(videoUploadMaxMb * 1024 * 1024) },
 });
 
 function uploadSingle(field) {
@@ -634,7 +635,7 @@ router.post("/upload/product-image", requireAdmin, (req, res) => {
 router.post("/upload/category-video", requireAdmin, (req, res) => {
   videoUpload.single("file")(req, res, (err) => {
     if (err && err.code === "LIMIT_FILE_SIZE") {
-      return res.status(413).json({ error: "file too large" });
+      return res.status(413).json({ error: `file too large (max ${videoUploadMaxMb}MB)` });
     }
     if (err) {
       return res.status(400).json({ error: "upload failed", details: String(err.message || err) });
