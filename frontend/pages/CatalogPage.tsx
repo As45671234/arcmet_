@@ -26,6 +26,21 @@ const normalizeSubcategory = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const isEmbeddableVideo = (value: string) => /^https?:\/\//i.test(String(value || '').trim());
+
+const toEmbedUrl = (raw: string) => {
+  const src = String(raw || '').trim();
+  if (!src) return '';
+
+  const ytMatch = src.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?/]+)/i);
+  if (ytMatch && ytMatch[1]) return `https://www.youtube.com/embed/${ytMatch[1]}`;
+
+  const vkMatch = src.match(/vkvideo\.ru\/video[-_0-9]+/i);
+  if (vkMatch) return src;
+
+  return src;
+};
+
 const parseInlineSpecPairs = (text: string) => {
   const src = String(text || '').trim();
   if (!src) return [] as Array<[string, string]>;
@@ -186,6 +201,13 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
 
   const activeCategory = categories.find((c) => c.id === selectedCatId);
   const q = searchQuery.trim().toLowerCase();
+  const activeSubcategories = Array.from<string>(
+    new Set<string>(
+      (activeCategory?.items || [])
+        .map((p) => normalizeSubcategory(p.brandOrGroup || ''))
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b, 'ru'));
 
   const formatAttrsInline = (attrs: Record<string, any> = {}, limit = 3) =>
     normalizeAttrEntries(attrs)
@@ -415,6 +437,54 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
               />
             </div>
           </div>
+
+          {Number(activeCategory?.styleVariant) === 2 ? (
+            <div className="mb-8 space-y-4">
+              {isEmbeddableVideo(String(activeCategory?.videoUrl || '')) ? (
+                <div className="rounded-3xl overflow-hidden border border-gray-200 bg-white shadow-sm">
+                  <div className="aspect-video bg-gray-100">
+                    {String(activeCategory?.videoUrl || '').match(/\.(mp4|webm|ogg)(\?.*)?$/i) ? (
+                      <video
+                        className="w-full h-full object-cover"
+                        src={String(activeCategory?.videoUrl || '')}
+                        controls
+                        playsInline
+                      />
+                    ) : (
+                      <iframe
+                        src={toEmbedUrl(String(activeCategory?.videoUrl || ''))}
+                        className="w-full h-full"
+                        loading="lazy"
+                        title={`${activeCategory?.title || 'Категория'} видео`}
+                        allow="autoplay; encrypted-media; picture-in-picture"
+                        allowFullScreen
+                      />
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              {activeSubcategories.length > 0 ? (
+                <div className="rounded-2xl bg-white border border-gray-200 p-3 flex flex-wrap gap-2">
+                  {activeSubcategories.map((sub) => (
+                    <button
+                      key={sub}
+                      type="button"
+                      onClick={() => {
+                        setSelectedSub(sub);
+                        const next = new URLSearchParams(searchParams);
+                        next.set('sub', sub);
+                        setSearchParams(next);
+                      }}
+                      className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-colors ${selectedSub === sub ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+                    >
+                      {sub}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
 
 

@@ -47,6 +47,9 @@ export interface Category {
   fields: string[];
   items: Product[];
   image?: string;
+  styleVariant?: 1 | 2;
+  videoUrl?: string;
+  productsCount?: number;
 }
 
 export interface CartItem extends Product {

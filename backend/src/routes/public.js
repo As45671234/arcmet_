@@ -76,7 +76,9 @@ function publicRoutes(emailLimiter) {
           title: p.category_title,
           fields: [],
           items: [],
-          image: ""
+          image: "",
+          styleVariant: 1,
+          videoUrl: ""
         });
       }
       const cat = categoriesMap.get(catId);
@@ -105,7 +107,10 @@ function publicRoutes(emailLimiter) {
       const metaMap = new Map(metas.map((m) => [m.category_id, m]));
       for (const [id, cat] of categoriesMap.entries()) {
         const meta = metaMap.get(id);
+        if (meta && meta.title) cat.title = String(meta.title || "").trim() || cat.title;
         if (meta && meta.image) cat.image = normalizeImageUrl(meta.image);
+        if (meta && Number(meta.styleVariant) === 2) cat.styleVariant = 2;
+        if (meta && meta.videoUrl) cat.videoUrl = String(meta.videoUrl || "").trim();
       }
     }
 

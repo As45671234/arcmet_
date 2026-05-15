@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Category, HomepageImages, SiteSettings } from '../types';
-import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage, adminPatchCategory, adminPurgeAll, adminGetSiteSettings, adminSaveSiteSettings, adminUploadImage } from '../services/api';
+import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage, adminPatchCategory, adminCreateCategory, adminDeleteCategory, adminPurgeAll, adminGetSiteSettings, adminSaveSiteSettings, adminUploadImage } from '../services/api';
 import { IMPORT_SUPPLIERS } from '../constants';
 import { DEFAULT_HOMEPAGE_IMAGES } from '../homepageDefaults';
 import { normalizeAssetUrl } from '../utils/assetUrl';
@@ -145,6 +145,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
   const [categoryImageUploading, setCategoryImageUploading] = useState<Record<string, boolean>>({});
   const [categoryImageSaving, setCategoryImageSaving] = useState<Record<string, boolean>>({});
   const [categoryImageDrafts, setCategoryImageDrafts] = useState<Record<string, string>>({});
+  const [categoryTitleDrafts, setCategoryTitleDrafts] = useState<Record<string, string>>({});
+  const [categoryStyleDrafts, setCategoryStyleDrafts] = useState<Record<string, 1 | 2>>({});
+  const [categoryVideoDrafts, setCategoryVideoDrafts] = useState<Record<string, string>>({});
+  const [categoryDeleting, setCategoryDeleting] = useState<Record<string, boolean>>({});
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [newCategoryForm, setNewCategoryForm] = useState({
+    id: '',
+    title: '',
+    image: '',
+    styleVariant: 1 as 1 | 2,
+    videoUrl: '',
+  });
   const [constructorLoading, setConstructorLoading] = useState(false);
   const [constructorSaving, setConstructorSaving] = useState(false);
   const [siteForm, setSiteForm] = useState<SiteSettings>(mergeSiteSettings(DEFAULT_SITE_SETTINGS));
@@ -394,6 +406,42 @@ useEffect(() => {
       });
       return next;
     });
+
+    setCategoryTitleDrafts((prev) => {
+      const next = { ...prev };
+      adminCategories.forEach((cat: any) => {
+        const id = String(cat.id || '');
+        if (!id) return;
+        if (next[id] === undefined || next[id] === '') {
+          next[id] = String(cat.title || id);
+        }
+      });
+      return next;
+    });
+
+    setCategoryStyleDrafts((prev) => {
+      const next = { ...prev };
+      adminCategories.forEach((cat: any) => {
+        const id = String(cat.id || '');
+        if (!id) return;
+        if (next[id] === undefined) {
+          next[id] = Number(cat.styleVariant) === 2 ? 2 : 1;
+        }
+      });
+      return next;
+    });
+
+    setCategoryVideoDrafts((prev) => {
+      const next = { ...prev };
+      adminCategories.forEach((cat: any) => {
+        const id = String(cat.id || '');
+        if (!id) return;
+        if (next[id] === undefined || next[id] === '') {
+          next[id] = String(cat.videoUrl || '');
+        }
+      });
+      return next;
+    });
   }, [adminCategories]);
 
 
@@ -639,12 +687,15 @@ useEffect(() => {
     }
   };
 
-  const saveCategoryImage = async (catId: string, title: string) => {
+  const saveCategoryMeta = async (catId: string) => {
     if (!token) return;
-    const image = String(categoryImageDrafts[catId] || "");
+    const image = String(categoryImageDrafts[catId] || '');
+    const title = String(categoryTitleDrafts[catId] || '').trim() || catId;
+    const styleVariant = Number(categoryStyleDrafts[catId]) === 2 ? 2 : 1;
+    const videoUrl = String(categoryVideoDrafts[catId] || '').trim();
     setCategoryImageSaving((prev) => ({ ...prev, [catId]: true }));
     try {
-      await adminPatchCategory(token, catId, { image, title });
+      await adminPatchCategory(token, catId, { image, title, styleVariant, videoUrl });
       await refreshAll();
     } catch (e: any) {
       alert(e?.message || "Ошибка сохранения категории");
@@ -653,19 +704,71 @@ useEffect(() => {
     }
   };
 
-  const uploadCategoryImage = async (catId: string, title: string, file?: File | null) => {
+  const uploadCategoryImage = async (catId: string, file?: File | null) => {
     if (!file || !token) return;
     setCategoryImageUploading((prev) => ({ ...prev, [catId]: true }));
     try {
       const res = await adminUploadProductImage(token, file);
       const imageUrl = String(res.imageUrl || "");
       setCategoryImageDrafts((prev) => ({ ...prev, [catId]: imageUrl }));
-      await adminPatchCategory(token, catId, { image: imageUrl, title });
+      await adminPatchCategory(token, catId, {
+        image: imageUrl,
+        title: String(categoryTitleDrafts[catId] || '').trim() || catId,
+        styleVariant: Number(categoryStyleDrafts[catId]) === 2 ? 2 : 1,
+        videoUrl: String(categoryVideoDrafts[catId] || '').trim(),
+      });
       await refreshAll();
     } catch (e: any) {
       alert(e?.message || "Ошибка загрузки изображения");
     } finally {
       setCategoryImageUploading((prev) => ({ ...prev, [catId]: false }));
+    }
+  };
+
+  const submitCreateCategory = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!token) return;
+
+    const title = String(newCategoryForm.title || '').trim();
+    const id = String(newCategoryForm.id || '').trim();
+    if (!title && !id) {
+      alert('Введите название или ID категории');
+      return;
+    }
+
+    setCreatingCategory(true);
+    try {
+      await adminCreateCategory(token, {
+        id,
+        title,
+        image: String(newCategoryForm.image || '').trim(),
+        styleVariant: Number(newCategoryForm.styleVariant) === 2 ? 2 : 1,
+        videoUrl: String(newCategoryForm.videoUrl || '').trim(),
+      });
+      setNewCategoryForm({ id: '', title: '', image: '', styleVariant: 1, videoUrl: '' });
+      await refreshAll();
+    } catch (e: any) {
+      alert(e?.message || 'Ошибка создания категории');
+    } finally {
+      setCreatingCategory(false);
+    }
+  };
+
+  const deleteCategoryById = async (catId: string) => {
+    if (!token) return;
+    const confirmed = window.confirm(`Удалить категорию ${catId}?`);
+    if (!confirmed) return;
+
+    const removeProducts = window.confirm('Удалить также все товары этой категории? Нажмите OK, чтобы удалить товары, или Отмена — удалить только категорию.');
+
+    setCategoryDeleting((prev) => ({ ...prev, [catId]: true }));
+    try {
+      await adminDeleteCategory(token, catId, removeProducts);
+      await refreshAll();
+    } catch (e: any) {
+      alert(e?.message || 'Ошибка удаления категории');
+    } finally {
+      setCategoryDeleting((prev) => ({ ...prev, [catId]: false }));
     }
   };
 
@@ -1356,7 +1459,7 @@ useEffect(() => {
             <div className="flex flex-col lg:flex-row lg:items-end gap-4 mb-6">
               <div className="flex-1">
                 <h3 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Категории</h3>
-                <p className="text-gray-500 text-sm mt-1">Изображения для карточек каталога на главной странице</p>
+                <p className="text-gray-500 text-sm mt-1">Управление поставщиками: название, стиль отображения, видео и изображение</p>
               </div>
               <button
                 onClick={() => refreshAll()}
@@ -1366,39 +1469,124 @@ useEffect(() => {
               </button>
             </div>
 
+            <form onSubmit={submitCreateCategory} className="mb-8 bg-gray-50 rounded-3xl border border-gray-100 p-6">
+              <div className="text-sm font-black text-blue-900 uppercase tracking-widest mb-4">Добавить поставщика</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+                <input
+                  className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                  value={newCategoryForm.title}
+                  onChange={(e) => setNewCategoryForm((prev) => ({ ...prev, title: e.target.value }))}
+                  placeholder="Название (например, ACME)"
+                />
+                <input
+                  className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                  value={newCategoryForm.id}
+                  onChange={(e) => setNewCategoryForm((prev) => ({ ...prev, id: e.target.value }))}
+                  placeholder="ID (опционально, например acme)"
+                />
+                <select
+                  className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                  value={newCategoryForm.styleVariant}
+                  onChange={(e) => setNewCategoryForm((prev) => ({ ...prev, styleVariant: Number(e.target.value) === 2 ? 2 : 1 }))}
+                >
+                  <option value={1}>Стиль 1 (текущий)</option>
+                  <option value={2}>Стиль 2 (с видео)</option>
+                </select>
+                <input
+                  className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                  value={newCategoryForm.image}
+                  onChange={(e) => setNewCategoryForm((prev) => ({ ...prev, image: e.target.value }))}
+                  placeholder="URL изображения (опционально)"
+                />
+                <input
+                  className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200"
+                  value={newCategoryForm.videoUrl}
+                  onChange={(e) => setNewCategoryForm((prev) => ({ ...prev, videoUrl: e.target.value }))}
+                  placeholder="URL видео (для стиля 2)"
+                />
+              </div>
+              <div className="mt-4">
+                <button
+                  type="submit"
+                  disabled={creatingCategory}
+                  className={`px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs ${creatingCategory ? 'bg-gray-200 text-gray-400' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700'}`}
+                >
+                  {creatingCategory ? 'Создание...' : 'Добавить поставщика'}
+                </button>
+              </div>
+            </form>
+
             {adminCategories.length === 0 ? (
               <div className="p-16 text-center bg-gray-50 rounded-3xl border border-gray-100">
                 <div className="text-gray-400 text-4xl mb-4"><i className="fas fa-images"></i></div>
                 <div className="font-bold text-gray-700">Категории не найдены</div>
-                <div className="text-sm text-gray-500 mt-2">Импортируйте товары, чтобы появились категории.</div>
+                <div className="text-sm text-gray-500 mt-2">Создайте поставщика вручную или импортируйте товары.</div>
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {adminCategories.map((cat: any) => {
                   const catId = String(cat.id || "");
-                  const title = String(cat.title || "");
+                  const titleDraft = categoryTitleDrafts[catId] ?? String(cat.title || catId);
+                  const styleDraft = categoryStyleDrafts[catId] ?? (Number(cat.styleVariant) === 2 ? 2 : 1);
+                  const videoDraft = categoryVideoDrafts[catId] ?? String(cat.videoUrl || '');
                   const draft = categoryImageDrafts[catId] ?? "";
                   const fallback = String((cat.items || []).find((it: any) => it?.image)?.image || "");
                   const previewSrc = draft || String(cat.image || "") || fallback;
                   const isUploading = !!categoryImageUploading[catId];
                   const isSaving = !!categoryImageSaving[catId];
+                  const isDeleting = !!categoryDeleting[catId];
+                  const productsCount = Number((cat.items || []).length || cat.productsCount || 0);
 
                   return (
                     <div key={catId} className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
                       <div className="aspect-[16/9] rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 mb-4">
                         {previewSrc ? (
-                          <img src={previewSrc} alt={title} className="w-full h-full object-cover" />
+                          <img src={previewSrc} alt={titleDraft} className="w-full h-full object-cover" />
                         ) : null}
                       </div>
 
                       <div className="flex items-center justify-between gap-4 mb-4">
                         <div>
-                          <div className="text-lg font-black text-blue-900">{title || "Без названия"}</div>
-                          <div className="text-xs text-gray-400">{catId}</div>
+                          <div className="text-lg font-black text-blue-900">{titleDraft || "Без названия"}</div>
+                          <div className="text-xs text-gray-400">{catId} · Товаров: {productsCount}</div>
                         </div>
                       </div>
 
                       <div className="space-y-3">
+                        <div>
+                          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Название</div>
+                          <input
+                            className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                            value={titleDraft}
+                            onChange={(e) => setCategoryTitleDrafts((prev) => ({ ...prev, [catId]: e.target.value }))}
+                            placeholder="Название поставщика"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Стиль</div>
+                            <select
+                              className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                              value={styleDraft}
+                              onChange={(e) => setCategoryStyleDrafts((prev) => ({ ...prev, [catId]: Number(e.target.value) === 2 ? 2 : 1 }))}
+                            >
+                              <option value={1}>Стиль 1 (как сейчас)</option>
+                              <option value={2}>Стиль 2 (с видео)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Видео URL</div>
+                            <input
+                              className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                              value={videoDraft}
+                              onChange={(e) => setCategoryVideoDrafts((prev) => ({ ...prev, [catId]: e.target.value }))}
+                              placeholder="https://..."
+                            />
+                          </div>
+                        </div>
+
                         <div>
                           <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Изображение (URL)</div>
                           <input
@@ -1419,7 +1607,7 @@ useEffect(() => {
                               className="hidden"
                               disabled={isUploading}
                               onChange={(e) => {
-                                uploadCategoryImage(catId, title, e.target.files?.[0]);
+                                uploadCategoryImage(catId, e.target.files?.[0]);
                                 e.currentTarget.value = '';
                               }}
                             />
@@ -1427,11 +1615,20 @@ useEffect(() => {
 
                           <button
                             type="button"
-                            onClick={() => saveCategoryImage(catId, title)}
+                            onClick={() => saveCategoryMeta(catId)}
                             disabled={isSaving || isUploading}
                             className={`px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs ${isSaving || isUploading ? 'bg-gray-100 text-gray-400' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700'}`}
                           >
                             {isSaving ? 'Сохранение...' : 'Сохранить'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => deleteCategoryById(catId)}
+                            disabled={isDeleting}
+                            className={`px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs ${isDeleting ? 'bg-gray-100 text-gray-400' : 'bg-red-600 text-white hover:bg-red-700'}`}
+                          >
+                            {isDeleting ? 'Удаление...' : 'Удалить'}
                           </button>
                         </div>
                       </div>

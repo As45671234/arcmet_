@@ -4,7 +4,9 @@ const CategoryMetaSchema = new mongoose.Schema(
   {
     category_id: { type: String, required: true, unique: true, index: true },
     title: { type: String, default: "" },
-    image: { type: String, default: "" }
+    image: { type: String, default: "" },
+    styleVariant: { type: Number, enum: [1, 2], default: 1 },
+    videoUrl: { type: String, default: "" }
   },
   { timestamps: true }
 );

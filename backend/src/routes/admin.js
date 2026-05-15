@@ -242,7 +242,15 @@ router.get("/catalog", requireAdmin, async (req, res) => {
   for (const p of products) {
     const catId = p.category_id;
     if (!categoriesMap.has(catId)) {
-      categoriesMap.set(catId, { id: catId, title: p.category_title, fields: [], items: [], image: "" });
+      categoriesMap.set(catId, {
+        id: catId,
+        title: p.category_title,
+        fields: [],
+        items: [],
+        image: "",
+        styleVariant: 1,
+        videoUrl: ""
+      });
     }
     categoriesMap.get(catId).items.push({
       id: String(p._id),
@@ -263,17 +271,37 @@ router.get("/catalog", requireAdmin, async (req, res) => {
     });
   }
 
-  const catIds = Array.from(categoriesMap.keys());
-  if (catIds.length > 0) {
-    const metas = await CategoryMeta.find({ category_id: { $in: catIds } }).lean();
-    const metaMap = new Map(metas.map((m) => [m.category_id, m]));
-    for (const [id, cat] of categoriesMap.entries()) {
-      const meta = metaMap.get(id);
-      if (meta && meta.image) cat.image = normalizeImageUrl(meta.image);
-    }
+  const metas = await CategoryMeta.find({}).lean();
+  const metaMap = new Map(metas.map((m) => [m.category_id, m]));
+
+  for (const [id, cat] of categoriesMap.entries()) {
+    const meta = metaMap.get(id);
+    if (meta && meta.title) cat.title = String(meta.title || "").trim() || cat.title;
+    if (meta && meta.image) cat.image = normalizeImageUrl(meta.image);
+    if (meta && Number(meta.styleVariant) === 2) cat.styleVariant = 2;
+    if (meta && meta.videoUrl) cat.videoUrl = String(meta.videoUrl || "").trim();
   }
 
-  res.json({ categories: Array.from(categoriesMap.values()) });
+  // Show meta-only suppliers too (even if they don't have products yet).
+  for (const meta of metas) {
+    const id = String(meta?.category_id || "").trim();
+    if (!id || categoriesMap.has(id)) continue;
+    categoriesMap.set(id, {
+      id,
+      title: String(meta?.title || id),
+      fields: [],
+      items: [],
+      image: normalizeImageUrl(meta?.image || ""),
+      styleVariant: Number(meta?.styleVariant) === 2 ? 2 : 1,
+      videoUrl: String(meta?.videoUrl || "").trim()
+    });
+  }
+
+  const items = Array.from(categoriesMap.values()).sort((a, b) =>
+    String(a.title || "").localeCompare(String(b.title || ""), "ru")
+  );
+
+  res.json({ categories: items });
 });
 
 router.get("/categories", requireAdmin, async (req, res) => {
@@ -283,19 +311,34 @@ router.get("/categories", requireAdmin, async (req, res) => {
   for (const p of products) {
     const catId = p.category_id;
     if (!categoriesMap.has(catId)) {
-      categoriesMap.set(catId, { id: catId, title: p.category_title, image: "" });
+      categoriesMap.set(catId, { id: catId, title: p.category_title, image: "", styleVariant: 1, videoUrl: "", productsCount: 0 });
     }
+    const cat = categoriesMap.get(catId);
+    cat.productsCount = Number(cat.productsCount || 0) + 1;
   }
 
-  const catIds = Array.from(categoriesMap.keys());
-  if (catIds.length > 0) {
-    const metas = await CategoryMeta.find({ category_id: { $in: catIds } }).lean();
-    const metaMap = new Map(metas.map((m) => [m.category_id, m]));
-    for (const [id, cat] of categoriesMap.entries()) {
-      const meta = metaMap.get(id);
-      if (meta && meta.image) cat.image = normalizeImageUrl(meta.image);
-      if (meta && meta.title && !cat.title) cat.title = meta.title;
-    }
+  const metas = await CategoryMeta.find({}).lean();
+  const metaMap = new Map(metas.map((m) => [m.category_id, m]));
+
+  for (const [id, cat] of categoriesMap.entries()) {
+    const meta = metaMap.get(id);
+    if (meta && meta.image) cat.image = normalizeImageUrl(meta.image);
+    if (meta && meta.title) cat.title = String(meta.title || "").trim() || cat.title;
+    if (meta && Number(meta.styleVariant) === 2) cat.styleVariant = 2;
+    if (meta && meta.videoUrl) cat.videoUrl = String(meta.videoUrl || "").trim();
+  }
+
+  for (const meta of metas) {
+    const id = String(meta?.category_id || "").trim();
+    if (!id || categoriesMap.has(id)) continue;
+    categoriesMap.set(id, {
+      id,
+      title: String(meta?.title || id),
+      image: normalizeImageUrl(meta?.image || ""),
+      styleVariant: Number(meta?.styleVariant) === 2 ? 2 : 1,
+      videoUrl: String(meta?.videoUrl || "").trim(),
+      productsCount: 0
+    });
   }
 
   const items = Array.from(categoriesMap.values()).sort((a, b) =>
@@ -311,10 +354,17 @@ router.patch("/categories/:id", requireAdmin, async (req, res) => {
 
   const image = req.body?.image;
   const title = req.body?.title;
+  const styleVariantRaw = req.body?.styleVariant;
+  const videoUrl = req.body?.videoUrl;
 
   const update = { category_id: id };
   if (image !== undefined) update.image = String(image || "");
   if (title !== undefined) update.title = String(title || "");
+  if (styleVariantRaw !== undefined) {
+    const sv = Number(styleVariantRaw) === 2 ? 2 : 1;
+    update.styleVariant = sv;
+  }
+  if (videoUrl !== undefined) update.videoUrl = String(videoUrl || "").trim();
 
   const saved = await CategoryMeta.findOneAndUpdate(
     { category_id: id },
@@ -322,12 +372,73 @@ router.patch("/categories/:id", requireAdmin, async (req, res) => {
     { upsert: true, new: true }
   ).lean();
 
+  if (title !== undefined) {
+    const normalizedTitle = String(title || "").trim();
+    await Product.updateMany(
+      { category_id: id },
+      { $set: { category_title: normalizedTitle, supplier_title: normalizedTitle } }
+    );
+  }
+
   res.json({
     ok: true,
     category: {
       id: saved.category_id,
       title: saved.title || "",
-      image: normalizeImageUrl(saved.image)
+      image: normalizeImageUrl(saved.image),
+      styleVariant: Number(saved.styleVariant) === 2 ? 2 : 1,
+      videoUrl: String(saved.videoUrl || "").trim()
+    }
+  });
+});
+
+router.post("/categories", requireAdmin, async (req, res) => {
+  const title = String(req.body?.title || "").trim();
+  const incomingId = String(req.body?.id || "").trim();
+  const id = incomingId || slugify(title);
+  if (!id) return res.status(400).json({ error: "category id or title required" });
+
+  const exists = await CategoryMeta.findOne({ category_id: id }).lean();
+  if (exists) return res.status(409).json({ error: "category already exists" });
+
+  const styleVariant = Number(req.body?.styleVariant) === 2 ? 2 : 1;
+  const created = await CategoryMeta.create({
+    category_id: id,
+    title: title || id,
+    image: String(req.body?.image || "").trim(),
+    styleVariant,
+    videoUrl: String(req.body?.videoUrl || "").trim()
+  });
+
+  res.json({
+    ok: true,
+    category: {
+      id: created.category_id,
+      title: created.title || "",
+      image: normalizeImageUrl(created.image),
+      styleVariant: Number(created.styleVariant) === 2 ? 2 : 1,
+      videoUrl: String(created.videoUrl || "").trim(),
+      productsCount: 0
+    }
+  });
+});
+
+router.delete("/categories/:id", requireAdmin, async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  if (!id) return res.status(400).json({ error: "category id required" });
+
+  const removeProducts = String(req.query.removeProducts || "").toLowerCase() === "true";
+
+  const [metaResult, productsResult] = await Promise.all([
+    CategoryMeta.deleteOne({ category_id: id }),
+    removeProducts ? Product.deleteMany({ category_id: id }) : Promise.resolve({ deletedCount: 0 })
+  ]);
+
+  res.json({
+    ok: true,
+    deleted: {
+      categoryMeta: Number(metaResult?.deletedCount || 0),
+      products: Number(productsResult?.deletedCount || 0)
     }
   });
 });

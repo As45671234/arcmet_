@@ -163,6 +163,22 @@ export async function adminPatchCategory(token: string, id: string, patch: any) 
   });
 }
 
+export async function adminCreateCategory(token: string, body: any) {
+  return request<{ ok: boolean; category: any }>(`/api/admin/categories`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function adminDeleteCategory(token: string, id: string, removeProducts = false) {
+  const q = removeProducts ? '?removeProducts=true' : '';
+  return request<{ ok: boolean; deleted: { categoryMeta: number; products: number } }>(`/api/admin/categories/${id}${q}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export async function adminPatchProduct(token: string, id: string, patch: any) {
   return request<{ product: any }>(`/api/admin/products/${id}`, {
     method: 'PATCH',
