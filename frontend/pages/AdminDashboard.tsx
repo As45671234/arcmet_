@@ -1593,7 +1593,7 @@ useEffect(() => {
                       </div>
 
                       {videoPreviewUrl && (
-                        <div className="aspect-video rounded-2xl overflow-hidden bg-gray-100 border border-gray-100 mb-4">
+                        <div className="max-w-xl mx-auto aspect-video rounded-xl overflow-hidden bg-black border border-gray-300 mb-4 shadow-md">
                           {isDirectVideo ? (
                             <video
                               key={videoPreviewUrl}
@@ -1601,7 +1601,10 @@ useEffect(() => {
                               src={videoPreviewUrl}
                               controls
                               playsInline
-                              preload="auto"
+                              preload="metadata"
+                              autoPlay={true}
+                              muted={true}
+                              loop={false}
                             />
                           ) : (
                             <iframe

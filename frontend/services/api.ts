@@ -44,6 +44,15 @@ export async function fetchCatalog() {
   return request<{ categories: any[] }>('/api/catalog');
 }
 
+export async function checkBackendHealth() {
+  try {
+    const res = await fetch('/api/health', { method: 'GET' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function adminLogin(password: string) {
   return request<{ token: string }>('/api/admin/login', {
     method: 'POST',
@@ -160,15 +169,16 @@ export async function adminUploadCategoryVideo(token: string, file: File) {
   });
 
   if (!res.ok) {
-    let msg = 'Ошибка загрузки видео';
+    let msg = `Ошибка загрузки видео (${res.status})`;
     try {
       const data = await res.json();
-      msg = data?.error || msg;
+      msg = data?.error || data?.details || msg;
     } catch {}
     throw new Error(msg);
   }
 
-  return res.json() as Promise<{ ok: boolean; videoUrl: string }>;
+  const data = await res.json();
+  return data as Promise<{ ok: boolean; videoUrl: string }>;
 }
 
 export async function adminFetchCategories(token: string) {

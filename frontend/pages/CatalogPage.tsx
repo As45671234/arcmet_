@@ -440,8 +440,8 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
           {Number(activeCategory?.styleVariant) === 2 ? (
             <div className="mb-8 space-y-4">
               {isEmbeddableVideo(String(activeCategory?.videoUrl || '')) ? (
-                <div className="rounded-3xl overflow-hidden border border-gray-200 bg-white shadow-sm">
-                  <div className="aspect-video bg-gray-100">
+                <div className="max-w-3xl mx-auto rounded-2xl overflow-hidden border border-gray-300 bg-black shadow-lg">
+                  <div className="aspect-video bg-gray-900">
                     {String(activeCategory?.videoUrl || '').match(/\.(mp4|webm|ogg)(\?.*)?$/i) ? (
                       <video
                         key={String(activeCategory?.videoUrl || '')}
@@ -449,8 +449,10 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                         src={String(activeCategory?.videoUrl || '')}
                         controls
                         playsInline
-                        preload="auto"
-                        autoPlay={false}
+                        preload="metadata"
+                        autoPlay={true}
+                        muted={true}
+                        loop={false}
                       />
                     ) : (
                       <iframe
