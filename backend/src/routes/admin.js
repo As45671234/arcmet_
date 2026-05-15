@@ -372,7 +372,7 @@ router.patch("/categories/:id", requireAdmin, async (req, res) => {
     const styleVariantRaw = req.body?.styleVariant;
     const videoUrl = req.body?.videoUrl;
 
-    const update = {};
+    const update = { category_id: id };
     if (image !== undefined) update.image = String(image || "");
     if (title !== undefined) update.title = String(title || "");
     if (styleVariantRaw !== undefined) {
@@ -383,7 +383,7 @@ router.patch("/categories/:id", requireAdmin, async (req, res) => {
     const saved = await CategoryMeta.findOneAndUpdate(
       { category_id: id },
       { $set: update },
-      { upsert: true, new: true, setDefaultsOnInsert: true, returnDocument: "after" }
+      { upsert: true, new: true, returnDocument: "after" }
     ).lean();
 
     if (!saved) return res.status(500).json({ error: "failed to save category meta" });
