@@ -1593,7 +1593,7 @@ useEffect(() => {
                       </div>
 
                       {videoPreviewUrl && (
-                        <div className="max-w-xl mx-auto aspect-video rounded-xl overflow-hidden bg-black border border-gray-300 mb-4 shadow-md">
+                        <div className="w-full aspect-[16/9] rounded-xl overflow-hidden bg-black border border-gray-300 mb-4 shadow-md">
                           {isDirectVideo ? (
                             <video
                               key={videoPreviewUrl}

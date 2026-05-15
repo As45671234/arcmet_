@@ -444,8 +444,8 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
           {Number(activeCategory?.styleVariant) === 2 ? (
             <div className="mb-8 space-y-4">
               {isEmbeddableVideo(String(activeCategory?.videoUrl || '')) ? (
-                <div className="max-w-3xl mx-auto rounded-2xl overflow-hidden border border-gray-300 bg-black shadow-lg">
-                  <div className="aspect-video bg-gray-900">
+                <div className="w-full rounded-2xl overflow-hidden border border-gray-300 bg-black shadow-lg">
+                  <div className="aspect-[16/9] bg-gray-900">
                     {String(activeCategory?.videoUrl || '').match(/\.(mp4|webm|ogg)(\?.*)?$/i) ? (
                       <video
                         key={String(activeCategory?.videoUrl || '')}
