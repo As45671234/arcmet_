@@ -26,6 +26,45 @@ export const DEFAULT_PRODUCT_SLIDE_IMAGES: Record<string, string> = {
   akfa: brandAkfa,
 };
 
+export const DEFAULT_PRODUCT_SLIDES = [
+  {
+    id: 'plastfoil',
+    title: 'PLASTFOIL',
+    description: 'ПВХ-мембраны и комплектующие для надежной гидроизоляции кровель и подземных конструкций.',
+    image: brandPlastfoil,
+  },
+  {
+    id: 'panelsan',
+    title: 'PANELSAN',
+    description: 'Сэндвич-панели и фасадные решения для быстровозводимых и энергоэффективных объектов.',
+    image: brandPanelsan,
+  },
+  {
+    id: 'fachmann',
+    title: 'FACHMANN',
+    description: 'Профессиональные комплектующие и инженерные элементы для кровельных систем.',
+    image: brandFachmann,
+  },
+  {
+    id: 'rheinzink',
+    title: 'RHEINZINK',
+    description: 'Премиальные решения для кровли и фасада с высокой долговечностью и архитектурной выразительностью.',
+    image: brandRheinzink,
+  },
+  {
+    id: 'penoplex',
+    title: 'ПЕНОПЛЭКС',
+    description: 'Эффективная теплоизоляция с высокой прочностью, низким водопоглощением и долгим сроком службы.',
+    image: penoplexProduct01,
+  },
+  {
+    id: 'akfa',
+    title: 'AKFA BUILD',
+    description: 'Профильные системы и строительные решения для современных коммерческих и жилых проектов.',
+    image: brandAkfa,
+  },
+];
+
 export const DEFAULT_PARTNER_LOGOS = [
   qsLogo,
   simbolLogo,
@@ -42,6 +81,6 @@ export const DEFAULT_HOMEPAGE_IMAGES: HomepageImages = {
   headerLogo: logoImg,
   footerLogo: logoImg,
   partnersBackground: 'https://arcmet.kz/wp-content/themes/arcmet/img/gor-fon.svg',
-  productSlides: Object.entries(DEFAULT_PRODUCT_SLIDE_IMAGES).map(([id, image]) => ({ id, image })),
+  productSlides: DEFAULT_PRODUCT_SLIDES.map(({ id, image, title, description }) => ({ id, image, title, description })),
   partnerLogos: DEFAULT_PARTNER_LOGOS,
 };

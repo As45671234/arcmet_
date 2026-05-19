@@ -36,6 +36,8 @@ const siteSettingsSchema = new mongoose.Schema(
       productSlides: [
         {
           id: { type: String, default: '' },
+          title: { type: String, default: '' },
+          description: { type: String, default: '' },
           image: { type: String, default: '' },
         },
       ],

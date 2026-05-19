@@ -94,6 +94,8 @@ export interface AboutSlide {
 export interface HomepageProductSlideImage {
   id: string;
   image: string;
+  title: string;
+  description: string;
 }
 
 export interface HomepageImages {

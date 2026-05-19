@@ -117,6 +117,8 @@ function normalizeSiteSettings(raw) {
         ? homepageImages.productSlides
             .map((item) => ({
               id: String(item && item.id ? item.id : "").trim(),
+              title: String(item && item.title ? item.title : "").trim(),
+              description: String(item && item.description ? item.description : "").trim(),
               image: normalizeImageUrl(item && item.image)
             }))
             .filter((item) => item.id)

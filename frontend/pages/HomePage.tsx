@@ -165,15 +165,26 @@ const HomePage: React.FC<HomePageProps> = ({ categories, siteSettings }) => {
         BRAND_ORDER.indexOf(a.brandKey) - BRAND_ORDER.indexOf(b.brandKey)
     );
 
-  const productSlideImageOverrides = new Map(
-    (siteSettings?.homepageImages?.productSlides || [])
-      .map((item) => [String(item?.id || '').trim(), normalizeAssetUrl(item?.image)])
-      .filter((entry): entry is [string, string] => Boolean(entry[0]))
-  );
+  const defaultProductSlideMap = new Map(DEFAULT_PRODUCT_SLIDES.map((slide) => [slide.id, slide] as const));
+  const savedProductSlides = Array.isArray(siteSettings?.homepageImages?.productSlides)
+    ? siteSettings.homepageImages.productSlides
+        .map((item) => {
+          const id = String(item?.id || '').trim();
+          if (!id) return null;
+          const defaults = defaultProductSlideMap.get(id);
+          return {
+            id,
+            title: String(item?.title || defaults?.title || '').trim(),
+            description: String(item?.description || defaults?.description || '').trim(),
+            image: normalizeAssetUrl(String(item?.image || defaults?.image || '').trim()),
+          };
+        })
+        .filter((slide): slide is { id: string; title: string; description: string; image: string } => Boolean(slide))
+    : [];
 
-  const productSlides = DEFAULT_PRODUCT_SLIDES.map((slide) => ({
+  const productSlides = savedProductSlides.length > 0 ? savedProductSlides : DEFAULT_PRODUCT_SLIDES.map((slide) => ({
     ...slide,
-    image: productSlideImageOverrides.get(slide.id) || slide.image,
+    image: normalizeAssetUrl(slide.image),
   }));
 
   const safeActiveProductIndex = Math.min(
@@ -182,6 +193,7 @@ const HomePage: React.FC<HomePageProps> = ({ categories, siteSettings }) => {
   );
   const activeSlide =
     productSlides[safeActiveProductIndex] ||
+    productSlides[0] ||
     DEFAULT_PRODUCT_SLIDES[0];
 
   const contactPhone = siteSettings?.phone || '+7 775 702 92 98';

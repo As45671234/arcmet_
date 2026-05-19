@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Category, HomepageImages, SiteSettings } from '../types';
 import { getAdminToken, fetchAdminCatalog, adminImportExcel, adminPatchProduct, adminDeleteProduct, adminCreateProduct, fetchCatalog, adminFetchOrders, adminFetchOrder, adminPatchOrder, adminDeleteOrder, adminExportOrder, adminFetchLeads, adminFetchLead, adminPatchLead, adminDeleteLead, adminUploadProductImage, adminPatchCategory, adminCreateCategory, adminDeleteCategory, adminPurgeAll, adminGetSiteSettings, adminSaveSiteSettings, adminUploadImage, adminUploadCategoryVideo, adminFetchCategories } from '../services/api';
 import { IMPORT_SUPPLIERS } from '../constants';
-import { DEFAULT_HOMEPAGE_IMAGES } from '../homepageDefaults';
+import { DEFAULT_HOMEPAGE_IMAGES, DEFAULT_PRODUCT_SLIDES } from '../homepageDefaults';
 import { normalizeAssetUrl } from '../utils/assetUrl';
 
 const DEFAULT_SITE_SETTINGS: SiteSettings = {
@@ -59,22 +59,31 @@ const DEFAULT_SITE_SETTINGS: SiteSettings = {
 
 const mergeHomepageImages = (raw?: Partial<HomepageImages> | null): HomepageImages => {
   const src = raw || {};
-  const productSlideOverrides = new Map(
-    (Array.isArray(src.productSlides) ? src.productSlides : [])
-      .map((item) => [String(item?.id || '').trim(), String(item?.image || '')] as const)
-      .filter((entry) => Boolean(entry[0]))
-  );
+  const defaultProductSlideMap = new Map(DEFAULT_PRODUCT_SLIDES.map((item) => [item.id, item] as const));
 
   const partnerLogos = Array.isArray(src.partnerLogos) ? src.partnerLogos : [];
+
+  const productSlides = Array.isArray(src.productSlides)
+    ? src.productSlides
+        .map((item) => {
+          const id = String(item?.id || '').trim();
+          if (!id) return null;
+          const defaults = defaultProductSlideMap.get(id);
+          return {
+            id,
+            title: String(item?.title || defaults?.title || '').trim(),
+            description: String(item?.description || defaults?.description || '').trim(),
+            image: String(item?.image || defaults?.image || '').trim(),
+          };
+        })
+        .filter((entry): entry is { id: string; title: string; description: string; image: string } => Boolean(entry))
+    : DEFAULT_PRODUCT_SLIDES.map((item) => ({ ...item }));
 
   return {
     headerLogo: String(src.headerLogo || DEFAULT_HOMEPAGE_IMAGES.headerLogo || ''),
     footerLogo: String(src.footerLogo || DEFAULT_HOMEPAGE_IMAGES.footerLogo || ''),
     partnersBackground: String(src.partnersBackground || DEFAULT_HOMEPAGE_IMAGES.partnersBackground || ''),
-    productSlides: DEFAULT_HOMEPAGE_IMAGES.productSlides.map((item) => ({
-      id: item.id,
-      image: String(productSlideOverrides.get(item.id) || item.image || ''),
-    })),
+    productSlides,
     partnerLogos: DEFAULT_HOMEPAGE_IMAGES.partnerLogos.map((item, index) => String(partnerLogos[index] || item || '')),
   };
 };
@@ -156,6 +165,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
   const [constructorLoading, setConstructorLoading] = useState(false);
   const [constructorSaving, setConstructorSaving] = useState(false);
   const [siteForm, setSiteForm] = useState<SiteSettings>(mergeSiteSettings(DEFAULT_SITE_SETTINGS));
+  const [newProductSlideId, setNewProductSlideId] = useState('');
 
   // Orders
   const [orders, setOrders] = useState<any[]>([]);
@@ -328,6 +338,68 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
         ),
       },
     }));
+  };
+
+  const updateHomepageProductSlideField = (id: string, patch: Partial<{ id: string; title: string; description: string; image: string }>) => {
+    setSiteForm((prev) => ({
+      ...prev,
+      homepageImages: {
+        ...mergeHomepageImages(prev.homepageImages),
+        productSlides: mergeHomepageImages(prev.homepageImages).productSlides.map((item) =>
+          item.id === id ? { ...item, ...patch, id: String(patch.id || item.id || '').trim() } : item
+        ),
+      },
+    }));
+  };
+
+  const addHomepageProductSlide = () => {
+    setSiteForm((prev) => {
+      const currentSlides = mergeHomepageImages(prev.homepageImages).productSlides;
+      const existingIds = new Set(currentSlides.map((item) => item.id));
+      const preferredId = String(newProductSlideId || '').trim();
+      const fallbackDefault = DEFAULT_PRODUCT_SLIDES.find((item) => !existingIds.has(item.id));
+      const newId = preferredId || fallbackDefault?.id || `custom-${Date.now()}`;
+      const defaults = DEFAULT_PRODUCT_SLIDES.find((item) => item.id === newId);
+      const nextSlide = {
+        id: newId,
+        title: defaults?.title || '',
+        description: defaults?.description || '',
+        image: defaults?.image || '',
+      };
+
+      if (currentSlides.some((item) => item.id === newId)) {
+        alert('Карточка с таким ID уже есть');
+        return prev;
+      }
+
+      setNewProductSlideId('');
+
+      return {
+        ...prev,
+        homepageImages: {
+          ...mergeHomepageImages(prev.homepageImages),
+          productSlides: [...currentSlides, nextSlide],
+        },
+      };
+    });
+  };
+
+  const removeHomepageProductSlide = (id: string) => {
+    setSiteForm((prev) => {
+      const currentSlides = mergeHomepageImages(prev.homepageImages).productSlides;
+      if (currentSlides.length <= 1) {
+        alert('Нужно оставить хотя бы одну карточку в блоке');
+        return prev;
+      }
+
+      return {
+        ...prev,
+        homepageImages: {
+          ...mergeHomepageImages(prev.homepageImages),
+          productSlides: currentSlides.filter((item) => item.id !== id),
+        },
+      };
+    });
   };
 
   const updateHomepagePartnerLogo = (index: number, image: string) => {
@@ -567,6 +639,8 @@ useEffect(() => {
           partnersBackground: String(homepageImages.partnersBackground || '').trim(),
           productSlides: (homepageImages.productSlides || []).map((item) => ({
             id: String(item.id || '').trim(),
+            title: String(item.title || '').trim(),
+            description: String(item.description || '').trim(),
             image: String(item.image || '').trim(),
           })),
           partnerLogos: (homepageImages.partnerLogos || [])
@@ -574,6 +648,19 @@ useEffect(() => {
             .filter(Boolean),
         },
       };
+
+      const productSlides = Array.isArray(payload.homepageImages.productSlides) ? payload.homepageImages.productSlides : [];
+      const slideIds = productSlides.map((item) => item.id).filter(Boolean);
+      if (slideIds.length !== new Set(slideIds).size) {
+        alert('В карточках "Наша продукция" есть повторяющиеся ID');
+        setConstructorSaving(false);
+        return;
+      }
+      if (productSlides.some((item) => !item.id)) {
+        alert('У каждой карточки "Наша продукция" должен быть ID');
+        setConstructorSaving(false);
+        return;
+      }
       await adminSaveSiteSettings(token, payload);
       alert('Конструктор главной страницы сохранен');
     } catch (error: any) {
@@ -1833,46 +1920,123 @@ useEffect(() => {
                   </div>
 
                   <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-4">
-                    <div className="text-sm font-black text-gray-700 uppercase">Карточки блока Наша продукция</div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {(siteForm.homepageImages?.productSlides || []).map((item) => {
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                      <div>
+                        <div className="text-sm font-black text-gray-700 uppercase">Карточки блока Наша продукция</div>
+                        <div className="text-xs text-gray-500 mt-1">Можно добавлять, удалять и менять текст каждой карточки.</div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                        <input
+                          className="w-full sm:w-72 px-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm"
+                          value={newProductSlideId}
+                          onChange={(e) => setNewProductSlideId(e.target.value)}
+                          placeholder="ID категории для новой карточки"
+                          list="product-slide-ids"
+                        />
+                        <button
+                          type="button"
+                          onClick={addHomepageProductSlide}
+                          className="px-4 py-3 rounded-2xl bg-blue-600 text-white text-xs font-black uppercase tracking-widest"
+                        >
+                          + Добавить карточку
+                        </button>
+                      </div>
+                    </div>
+
+                    <datalist id="product-slide-ids">
+                      {DEFAULT_PRODUCT_SLIDES.map((slide) => (
+                        <option key={slide.id} value={slide.id} />
+                      ))}
+                    </datalist>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                      {(siteForm.homepageImages?.productSlides || []).map((item, idx) => {
                         const preview = normalizeAssetUrl(item.image);
+                        const isLast = (siteForm.homepageImages?.productSlides || []).length <= 1;
                         return (
-                          <div key={item.id} className="rounded-2xl border border-gray-100 p-4 space-y-3 bg-gray-50">
-                            <div className="text-xs font-black text-gray-500 uppercase tracking-widest">{item.id}</div>
-                            <div className="h-32 rounded-2xl overflow-hidden border border-gray-200 bg-white flex items-center justify-center">
-                              {preview ? (
-                                <img src={preview} alt={item.id} className="w-full h-full object-cover" />
-                              ) : (
-                                <i className="fas fa-image text-3xl text-gray-300"></i>
-                              )}
+                          <div key={item.id || idx} className="rounded-2xl border border-gray-100 p-4 space-y-3 bg-gray-50">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Карточка #{idx + 1}</div>
+                                <div className="text-sm font-black text-blue-900 mt-1 truncate">{item.id || 'Без ID'}</div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeHomepageProductSlide(item.id)}
+                                disabled={isLast}
+                                className={`text-xs font-black uppercase tracking-widest px-3 py-2 rounded-xl ${isLast ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+                              >
+                                Удалить
+                              </button>
                             </div>
-                            <input
-                              className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm"
-                              value={item.image || ''}
-                              onChange={(e) => updateHomepageProductSlide(item.id, e.target.value)}
-                              placeholder="URL изображения"
-                            />
-                            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold hover:bg-blue-100 transition-colors">
-                              <i className="fas fa-upload"></i> Загрузить файл
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={async (e) => {
-                                  const file = e.target.files?.[0];
-                                  if (!file) return;
-                                  try {
-                                    const url = await uploadConstructorImage(file);
-                                    updateHomepageProductSlide(item.id, url);
-                                  } catch {
-                                    alert('Ошибка загрузки изображения');
-                                  } finally {
-                                    e.target.value = '';
-                                  }
-                                }}
-                              />
-                            </label>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <div className="md:col-span-1 space-y-3">
+                                <div className="h-32 rounded-2xl overflow-hidden border border-gray-200 bg-white flex items-center justify-center">
+                                  {preview ? (
+                                    <img src={preview} alt={item.title || item.id} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <i className="fas fa-image text-3xl text-gray-300"></i>
+                                  )}
+                                </div>
+                                <input
+                                  className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm"
+                                  value={item.image || ''}
+                                  onChange={(e) => updateHomepageProductSlideField(item.id, { image: e.target.value })}
+                                  placeholder="URL изображения"
+                                />
+                                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold hover:bg-blue-100 transition-colors">
+                                  <i className="fas fa-upload"></i> Загрузить файл
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      try {
+                                        const url = await uploadConstructorImage(file);
+                                        updateHomepageProductSlideField(item.id, { image: url });
+                                      } catch {
+                                        alert('Ошибка загрузки изображения');
+                                      } finally {
+                                        e.target.value = '';
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              </div>
+
+                              <div className="md:col-span-2 space-y-3">
+                                <div>
+                                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">ID категории</div>
+                                  <input
+                                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm"
+                                    value={item.id || ''}
+                                    onChange={(e) => updateHomepageProductSlideField(item.id, { id: e.target.value })}
+                                    placeholder="например: fachmann"
+                                  />
+                                </div>
+                                <div>
+                                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Заголовок карточки</div>
+                                  <input
+                                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm"
+                                    value={item.title || ''}
+                                    onChange={(e) => updateHomepageProductSlideField(item.id, { title: e.target.value })}
+                                    placeholder="Например: FACHMANN"
+                                  />
+                                </div>
+                                <div>
+                                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Описание карточки</div>
+                                  <textarea
+                                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 min-h-[120px] text-sm"
+                                    value={item.description || ''}
+                                    onChange={(e) => updateHomepageProductSlideField(item.id, { description: e.target.value })}
+                                    placeholder="Короткий текст для карточки"
+                                  />
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         );
                       })}
