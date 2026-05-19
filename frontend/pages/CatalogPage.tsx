@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Category, Product } from '../types';
 import noPhotoImage from '../components/img/no photo/no-photo.svg';
+import { applySeo } from '../utils/seo';
 
 const ATTR_LABELS: Record<string, string> = {
   thickness_mm: 'Толщина, мм',
@@ -19,6 +20,86 @@ const ATTR_LABELS: Record<string, string> = {
   weight_kg: 'Вес, кг',
 };
 const attrLabel = (key: string) => ATTR_LABELS[key] || key.replace(/_/g, ' ');
+
+const formatSeoValue = (value: unknown) => String(value || '').replace(/\s+/g, ' ').trim();
+
+const getSeoProductImages = (product: Product) => {
+  const list = [
+    ...(Array.isArray(product.images) ? product.images : []),
+    product.image || '',
+  ]
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(list));
+};
+
+const buildProductSeoDescription = (product: Product, categoryTitle: string) => {
+  const attrs = normalizeAttrEntries((product.attrs || {}) as Record<string, any>)
+    .slice(0, 4)
+    .map(([key, val]) => `${key}: ${val}`)
+    .join('; ');
+
+  const price = product.prices?.retail
+    ? `Цена: ${Number(product.prices.retail).toLocaleString('ru-RU')} ₸.`
+    : product.prices?.note
+      ? String(product.prices.note).trim()
+      : '';
+
+  return [
+    product.description,
+    attrs,
+    price,
+    categoryTitle ? `Категория: ${categoryTitle}.` : '',
+  ]
+    .map(formatSeoValue)
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 320);
+};
+
+const buildProductSeoKeywords = (product: Product, categoryTitle: string) => {
+  const attrValues = normalizeAttrEntries((product.attrs || {}) as Record<string, any>)
+    .slice(0, 6)
+    .flatMap(([key, val]) => [key, val]);
+
+  return Array.from(new Set([
+    product.name,
+    product.brandOrGroup,
+    categoryTitle,
+    product.sku,
+    ...attrValues,
+  ]
+    .map(formatSeoValue)
+    .filter(Boolean)))
+    .slice(0, 12)
+    .join(', ');
+};
+
+const buildProductStructuredData = (product: Product, categoryTitle: string) => {
+  const image = getSeoProductImages(product)[0] || noPhotoImage;
+  const hasPrice = Number.isFinite(Number(product.prices?.retail));
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+    description: buildProductSeoDescription(product, categoryTitle),
+    image,
+    sku: product.sku || undefined,
+    category: categoryTitle || undefined,
+    brand: product.brandOrGroup ? { '@type': 'Brand', name: product.brandOrGroup } : undefined,
+    offers: hasPrice
+      ? {
+          '@type': 'Offer',
+          priceCurrency: 'KZT',
+          price: Number(product.prices.retail),
+          availability: product.inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+          url: 'https://arcmet.kz/#/catalog',
+        }
+      : undefined,
+  };
+};
 
 const normalizeSubcategory = (value: string) =>
   String(value || '')
@@ -233,14 +314,7 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
       .filter((p) => !selectedSub || (p.brandOrGroup || '').trim() === selectedSub) || [];
 
   const getProductImages = (product: Product) => {
-    const list = [
-      ...(Array.isArray(product.images) ? product.images : []),
-      product.image || '',
-    ]
-      .map((item) => String(item || '').trim())
-      .filter(Boolean);
-
-    return Array.from(new Set(list));
+    return getSeoProductImages(product);
   };
 
   const getProductImage = (product: Product) => {
@@ -281,6 +355,39 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
     if (target.src.includes('no-photo.svg')) return;
     target.src = noPhotoImage;
   };
+
+  useEffect(() => {
+    const categoryTitle = formatSeoValue(activeCategory?.title || 'Каталог товаров');
+    const totalProducts = filteredProducts.length;
+
+    if (selectedProduct) {
+      const title = `${selectedProduct.name} | ${categoryTitle} | ARCMET`;
+      const description = buildProductSeoDescription(selectedProduct, categoryTitle);
+      const keywords = buildProductSeoKeywords(selectedProduct, categoryTitle);
+
+      return applySeo({
+        title,
+        description,
+        keywords,
+        canonicalUrl: 'https://arcmet.kz/catalog',
+        ogType: 'product',
+        ogImage: getProductImages(selectedProduct)[0] || noPhotoImage,
+        ogUrl: 'https://arcmet.kz/catalog',
+        twitterCard: 'summary_large_image',
+        structuredData: buildProductStructuredData(selectedProduct, categoryTitle),
+      });
+    }
+
+    return applySeo({
+      title: `${categoryTitle} | Каталог ARCMET`,
+      description: `Каталог ARCMET: ${totalProducts} товаров в категории ${categoryTitle}. Подбор строительных материалов, теплоизоляции и гидроизоляции под текущие задачи и характеристики.`,
+      keywords: [categoryTitle, 'каталог', 'строительные материалы', 'теплоизоляция', 'гидроизоляция', 'ARCMET'].join(', '),
+      canonicalUrl: 'https://arcmet.kz/catalog',
+      ogType: 'website',
+      ogUrl: 'https://arcmet.kz/catalog',
+      twitterCard: 'summary_large_image',
+    });
+  }, [activeCategory?.title, filteredProducts.length, selectedProduct]);
 
   return (
     <div className="container mx-auto px-6 py-12">

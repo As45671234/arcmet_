@@ -10,6 +10,7 @@ import { CATEGORY_IMAGES, DEFAULT_CATEGORY_IMAGE } from '../constants';
 import { Link } from 'react-router-dom';
 import { DEFAULT_PRODUCT_SLIDE_IMAGES } from '../homepageDefaults';
 import { normalizeAssetUrl } from '../utils/assetUrl';
+import { applySeo } from '../utils/seo';
 
 interface HomePageProps {
   categories: Category[];
@@ -199,6 +200,29 @@ const HomePage: React.FC<HomePageProps> = ({ categories, siteSettings }) => {
   const contactPhone = siteSettings?.phone || '+7 775 702 92 98';
   const contactEmail = siteSettings?.email || 'ceo@arcmet.kz';
   const contactAddress = siteSettings?.address || 'Талапкерская 26а, офис 202';
+
+  useEffect(() => {
+    const featuredBrands = productSlides.slice(0, 3).map((slide) => slide.title).filter(Boolean).join(', ');
+    const totalCategories = categories.length;
+    const totalItems = categories.reduce((sum, category) => sum + (category.items?.length || 0), 0);
+
+    return applySeo({
+      title: 'ARCMET — строительные материалы, теплоизоляция и гидроизоляция',
+      description: `ARCMET поставляет строительные материалы для кровли, фасадов и инженерных систем. Актуальный каталог обновляется вместе с товарами и характеристиками. Категорий: ${totalCategories}, товаров: ${totalItems}. ${featuredBrands ? `Популярные бренды: ${featuredBrands}.` : ''}`,
+      keywords: [
+        'ARCMET',
+        'строительные материалы',
+        'теплоизоляция',
+        'гидроизоляция',
+        'каталог продукции',
+        featuredBrands,
+      ].filter(Boolean).join(', '),
+      canonicalUrl: 'https://arcmet.kz/',
+      ogType: 'website',
+      ogUrl: 'https://arcmet.kz/',
+      twitterCard: 'summary_large_image',
+    });
+  }, [categories, productSlides]);
 
 
   const leadModal = isLeadModalOpen ? (
