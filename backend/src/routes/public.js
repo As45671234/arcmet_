@@ -78,7 +78,10 @@ function publicRoutes(emailLimiter) {
           items: [],
           image: "",
           styleVariant: 1,
-          videoUrl: ""
+          videoUrl: "",
+          seoTitle: "",
+          seoDescription: "",
+          seoKeywords: ""
         });
       }
       const cat = categoriesMap.get(catId);
@@ -111,6 +114,9 @@ function publicRoutes(emailLimiter) {
         if (meta && meta.image) cat.image = normalizeImageUrl(meta.image);
         if (meta && Number(meta.styleVariant) === 2) cat.styleVariant = 2;
         if (meta && meta.videoUrl) cat.videoUrl = String(meta.videoUrl || "").trim();
+        if (meta) cat.seoTitle = String(meta.seoTitle || "").trim();
+        if (meta) cat.seoDescription = String(meta.seoDescription || "").trim();
+        if (meta) cat.seoKeywords = String(meta.seoKeywords || "").trim();
       }
     }
 

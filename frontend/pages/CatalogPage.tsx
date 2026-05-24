@@ -95,7 +95,7 @@ const buildProductStructuredData = (product: Product, categoryTitle: string) => 
           priceCurrency: 'KZT',
           price: Number(product.prices.retail),
           availability: product.inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-          url: 'https://arcmet.kz/#/catalog',
+          url: 'https://arcmet.kz/catalog',
         }
       : undefined,
   };
@@ -378,13 +378,20 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
       });
     }
 
+    const seoTitle = formatSeoValue(activeCategory?.seoTitle || '') || `${categoryTitle} | Каталог ARCMET`;
+    const seoDescription = formatSeoValue(activeCategory?.seoDescription || '') ||
+      `Каталог ARCMET: ${totalProducts} товаров в категории ${categoryTitle}. Подбор строительных материалов, теплоизоляции и гидроизоляции под текущие задачи и характеристики.`;
+    const seoKeywords = formatSeoValue(activeCategory?.seoKeywords || '') ||
+      [categoryTitle, 'каталог', 'строительные материалы', 'теплоизоляция', 'гидроизоляция', 'ARCMET'].join(', ');
+
     return applySeo({
-      title: `${categoryTitle} | Каталог ARCMET`,
-      description: `Каталог ARCMET: ${totalProducts} товаров в категории ${categoryTitle}. Подбор строительных материалов, теплоизоляции и гидроизоляции под текущие задачи и характеристики.`,
-      keywords: [categoryTitle, 'каталог', 'строительные материалы', 'теплоизоляция', 'гидроизоляция', 'ARCMET'].join(', '),
-      canonicalUrl: 'https://arcmet.kz/catalog',
+      title: seoTitle,
+      description: seoDescription,
+      keywords: seoKeywords,
+      canonicalUrl: `https://arcmet.kz/catalog?cat=${encodeURIComponent(activeCategory?.id || '')}`,
       ogType: 'website',
-      ogUrl: 'https://arcmet.kz/catalog',
+      ogImage: activeCategory?.image || undefined,
+      ogUrl: `https://arcmet.kz/catalog?cat=${encodeURIComponent(activeCategory?.id || '')}`,
       twitterCard: 'summary_large_image',
     });
   }, [activeCategory?.title, filteredProducts.length, selectedProduct]);

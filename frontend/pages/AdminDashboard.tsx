@@ -156,6 +156,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
   const [categoryTitleDrafts, setCategoryTitleDrafts] = useState<Record<string, string>>({});
   const [categoryStyleDrafts, setCategoryStyleDrafts] = useState<Record<string, 1 | 2>>({});
   const [categoryVideoDrafts, setCategoryVideoDrafts] = useState<Record<string, string>>({});
+  const [categorySeoDrafts, setCategorySeoDrafts] = useState<Record<string, { seoTitle: string; seoDescription: string; seoKeywords: string }>>({});
   const [categoryDeleting, setCategoryDeleting] = useState<Record<string, boolean>>({});
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [newCategoryForm, setNewCategoryForm] = useState({
@@ -421,6 +422,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
           title: String(cat.title || ''),
           styleVariant: Number(cat.styleVariant) === 2 ? 2 : 1,
           videoUrl: String(cat.videoUrl || '').trim(),
+          seoTitle: String(cat.seoTitle || '').trim(),
+          seoDescription: String(cat.seoDescription || '').trim(),
+          seoKeywords: String(cat.seoKeywords || '').trim(),
           productsCount: Number(cat.productsCount || 0),
         },
       ])
@@ -435,6 +439,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
         title: meta.title || cat.title,
         styleVariant: meta.styleVariant,
         videoUrl: meta.videoUrl,
+        seoTitle: meta.seoTitle,
+        seoDescription: meta.seoDescription,
+        seoKeywords: meta.seoKeywords,
         productsCount: Number((cat.items || []).length || meta.productsCount || 0),
       };
     });
@@ -449,6 +456,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
         image: '',
         styleVariant: meta.styleVariant,
         videoUrl: meta.videoUrl,
+        seoTitle: meta.seoTitle,
+        seoDescription: meta.seoDescription,
+        seoKeywords: meta.seoKeywords,
         productsCount: meta.productsCount || 0,
       });
     }
@@ -813,19 +823,30 @@ useEffect(() => {
     const title = String(categoryTitleDrafts[catId] || '').trim() || catId;
     const styleVariant = Number(categoryStyleDrafts[catId]) === 2 ? 2 : 1;
     const videoUrl = String(categoryVideoDrafts[catId] || '').trim();
+    const origCat = adminCategories.find((c: any) => String(c.id || '') === catId) as any;
+    const seoDraft = categorySeoDrafts[catId] ?? {
+      seoTitle: String(origCat?.seoTitle || ''),
+      seoDescription: String(origCat?.seoDescription || ''),
+      seoKeywords: String(origCat?.seoKeywords || ''),
+    };
     setCategoryImageSaving((prev) => ({ ...prev, [catId]: true }));
     try {
-      const res = await adminPatchCategory(token, catId, { title, styleVariant, videoUrl });
+      const res = await adminPatchCategory(token, catId, {
+        title, styleVariant, videoUrl,
+        seoTitle: seoDraft.seoTitle,
+        seoDescription: seoDraft.seoDescription,
+        seoKeywords: seoDraft.seoKeywords,
+      });
       const saved = res?.category;
       if (saved) {
         setAdminCategories((prev) => {
           const exists = prev.some((c: any) => String(c.id || '') === catId);
           if (!exists) {
-            return [...prev, { id: catId, title: saved.title || title, styleVariant, videoUrl, items: [], productsCount: 0 } as any];
+            return [...prev, { id: catId, title: saved.title || title, styleVariant, videoUrl, seoTitle: saved.seoTitle || '', seoDescription: saved.seoDescription || '', seoKeywords: saved.seoKeywords || '', items: [], productsCount: 0 } as any];
           }
           return prev.map((c: any) => (
             String(c.id || '') === catId
-              ? { ...c, title: saved.title || title, styleVariant, videoUrl: saved.videoUrl || videoUrl }
+              ? { ...c, title: saved.title || title, styleVariant, videoUrl: saved.videoUrl || videoUrl, seoTitle: saved.seoTitle || '', seoDescription: saved.seoDescription || '', seoKeywords: saved.seoKeywords || '' }
               : c
           ));
         });
@@ -849,10 +870,19 @@ useEffect(() => {
       const res = await adminUploadCategoryVideo(token, file);
       const uploadedUrl = String(res.videoUrl || '').trim();
       setCategoryVideoDrafts((prev) => ({ ...prev, [catId]: uploadedUrl }));
+      const origForVideo = adminCategories.find((c: any) => String(c.id || '') === catId) as any;
+      const seoDraftForVideo = categorySeoDrafts[catId] ?? {
+        seoTitle: String(origForVideo?.seoTitle || ''),
+        seoDescription: String(origForVideo?.seoDescription || ''),
+        seoKeywords: String(origForVideo?.seoKeywords || ''),
+      };
       await adminPatchCategory(token, catId, {
         title: String(categoryTitleDrafts[catId] || '').trim() || catId,
         styleVariant: Number(categoryStyleDrafts[catId]) === 2 ? 2 : 1,
         videoUrl: uploadedUrl,
+        seoTitle: seoDraftForVideo.seoTitle,
+        seoDescription: seoDraftForVideo.seoDescription,
+        seoKeywords: seoDraftForVideo.seoKeywords,
       });
       await refreshAll();
     } catch (e: any) {
@@ -1655,6 +1685,11 @@ useEffect(() => {
                   const titleDraft = categoryTitleDrafts[catId] ?? String(cat.title || catId);
                   const styleDraft = categoryStyleDrafts[catId] ?? (Number(cat.styleVariant) === 2 ? 2 : 1);
                   const videoDraft = categoryVideoDrafts[catId] ?? String(cat.videoUrl || '');
+                  const seoDraft = categorySeoDrafts[catId] ?? {
+                    seoTitle: String((cat as any).seoTitle || ''),
+                    seoDescription: String((cat as any).seoDescription || ''),
+                    seoKeywords: String((cat as any).seoKeywords || ''),
+                  };
                   const isUploading = !!categoryVideoUploading[catId];
                   const isSaving = !!categoryImageSaving[catId];
                   const isDeleting = !!categoryDeleting[catId];
@@ -1738,6 +1773,40 @@ useEffect(() => {
                               value={videoDraft}
                               onChange={(e) => setCategoryVideoDrafts((prev) => ({ ...prev, [catId]: e.target.value }))}
                               placeholder="https://youtube.com/watch?v=... или https://.../video.mp4"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="border-t border-gray-100 pt-3 space-y-3">
+                          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">SEO</div>
+                          <div>
+                            <div className="text-[10px] text-gray-400 mb-1">Title (заголовок для поиска)</div>
+                            <input
+                              className="w-full px-4 py-2 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                              value={seoDraft.seoTitle}
+                              maxLength={120}
+                              onChange={(e) => setCategorySeoDrafts((prev) => ({ ...prev, [catId]: { ...seoDraft, seoTitle: e.target.value } }))}
+                              placeholder={`${titleDraft} | Каталог ARCMET`}
+                            />
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-gray-400 mb-1">Description (описание для поиска)</div>
+                            <textarea
+                              className="w-full px-4 py-2 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm resize-none"
+                              rows={2}
+                              value={seoDraft.seoDescription}
+                              maxLength={320}
+                              onChange={(e) => setCategorySeoDrafts((prev) => ({ ...prev, [catId]: { ...seoDraft, seoDescription: e.target.value } }))}
+                              placeholder="Краткое описание категории для поисковиков (до 160 символов)"
+                            />
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-gray-400 mb-1">Keywords (ключевые слова, через запятую)</div>
+                            <input
+                              className="w-full px-4 py-2 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
+                              value={seoDraft.seoKeywords}
+                              onChange={(e) => setCategorySeoDrafts((prev) => ({ ...prev, [catId]: { ...seoDraft, seoKeywords: e.target.value } }))}
+                              placeholder="keyword1, keyword2, ..."
                             />
                           </div>
                         </div>

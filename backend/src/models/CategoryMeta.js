@@ -6,7 +6,10 @@ const CategoryMetaSchema = new mongoose.Schema(
     title: { type: String, default: "" },
     image: { type: String, default: "" },
     styleVariant: { type: Number, enum: [1, 2], default: 1 },
-    videoUrl: { type: String, default: "" }
+    videoUrl: { type: String, default: "" },
+    seoTitle: { type: String, default: "" },
+    seoDescription: { type: String, default: "" },
+    seoKeywords: { type: String, default: "" }
   },
   { timestamps: true }
 );

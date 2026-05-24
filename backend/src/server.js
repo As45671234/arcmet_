@@ -11,6 +11,7 @@ const { connectDb } = require("./config/db");
 
 const publicRoutes = require("./routes/public");
 const adminRoutes = require("./routes/admin");
+const CategoryMeta = require("./models/CategoryMeta");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -46,6 +47,45 @@ app.use("/api", publicRoutes(emailLimiter));
 app.use("/api/admin", adminRoutes);
 
 app.get("/health", (req, res) => res.json({ ok: true }));
+
+app.get("/robots.txt", (req, res) => {
+  res.type("text/plain");
+  res.send(
+    "User-agent: *\nAllow: /\nDisallow: /admin\n\nSitemap: https://arcmet.kz/sitemap.xml"
+  );
+});
+
+app.get("/sitemap.xml", async (req, res) => {
+  try {
+    const metas = await CategoryMeta.find({}).lean();
+    const baseUrl = "https://arcmet.kz";
+    const today = new Date().toISOString().slice(0, 10);
+
+    const urls = [
+      { loc: `${baseUrl}/`, changefreq: "weekly", priority: "1.0" },
+      { loc: `${baseUrl}/catalog`, changefreq: "daily", priority: "0.9" },
+      ...metas.map((m) => ({
+        loc: `${baseUrl}/catalog?cat=${encodeURIComponent(m.category_id)}`,
+        changefreq: "weekly",
+        priority: "0.8"
+      }))
+    ];
+
+    const xml = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+      ...urls.map((u) =>
+        `  <url>\n    <loc>${u.loc}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`
+      ),
+      "</urlset>"
+    ].join("\n");
+
+    res.header("Content-Type", "application/xml");
+    res.send(xml);
+  } catch (e) {
+    res.status(500).send("<?xml version=\"1.0\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"/>");
+  }
+});
 
 app.use((err, req, res, next) => {
   if (!err) return next();

@@ -271,7 +271,10 @@ router.get("/catalog", requireAdmin, async (req, res) => {
         items: [],
         image: "",
         styleVariant: 1,
-        videoUrl: ""
+        videoUrl: "",
+        seoTitle: "",
+        seoDescription: "",
+        seoKeywords: ""
       });
     }
     categoriesMap.get(catId).items.push({
@@ -302,6 +305,9 @@ router.get("/catalog", requireAdmin, async (req, res) => {
     if (meta && meta.image) cat.image = normalizeImageUrl(meta.image);
     if (meta && Number(meta.styleVariant) === 2) cat.styleVariant = 2;
     if (meta && meta.videoUrl) cat.videoUrl = String(meta.videoUrl || "").trim();
+    if (meta) cat.seoTitle = String(meta.seoTitle || "").trim();
+    if (meta) cat.seoDescription = String(meta.seoDescription || "").trim();
+    if (meta) cat.seoKeywords = String(meta.seoKeywords || "").trim();
   }
 
   // Show meta-only suppliers too (even if they don't have products yet).
@@ -315,7 +321,10 @@ router.get("/catalog", requireAdmin, async (req, res) => {
       items: [],
       image: normalizeImageUrl(meta?.image || ""),
       styleVariant: Number(meta?.styleVariant) === 2 ? 2 : 1,
-      videoUrl: String(meta?.videoUrl || "").trim()
+      videoUrl: String(meta?.videoUrl || "").trim(),
+      seoTitle: String(meta?.seoTitle || "").trim(),
+      seoDescription: String(meta?.seoDescription || "").trim(),
+      seoKeywords: String(meta?.seoKeywords || "").trim()
     });
   }
 
@@ -333,7 +342,7 @@ router.get("/categories", requireAdmin, async (req, res) => {
   for (const p of products) {
     const catId = p.category_id;
     if (!categoriesMap.has(catId)) {
-      categoriesMap.set(catId, { id: catId, title: p.category_title, image: "", styleVariant: 1, videoUrl: "", productsCount: 0 });
+      categoriesMap.set(catId, { id: catId, title: p.category_title, image: "", styleVariant: 1, videoUrl: "", seoTitle: "", seoDescription: "", seoKeywords: "", productsCount: 0 });
     }
     const cat = categoriesMap.get(catId);
     cat.productsCount = Number(cat.productsCount || 0) + 1;
@@ -348,6 +357,9 @@ router.get("/categories", requireAdmin, async (req, res) => {
     if (meta && meta.title) cat.title = String(meta.title || "").trim() || cat.title;
     if (meta && Number(meta.styleVariant) === 2) cat.styleVariant = 2;
     if (meta && meta.videoUrl) cat.videoUrl = String(meta.videoUrl || "").trim();
+    if (meta) cat.seoTitle = String(meta.seoTitle || "").trim();
+    if (meta) cat.seoDescription = String(meta.seoDescription || "").trim();
+    if (meta) cat.seoKeywords = String(meta.seoKeywords || "").trim();
   }
 
   for (const meta of metas) {
@@ -359,6 +371,9 @@ router.get("/categories", requireAdmin, async (req, res) => {
       image: normalizeImageUrl(meta?.image || ""),
       styleVariant: Number(meta?.styleVariant) === 2 ? 2 : 1,
       videoUrl: String(meta?.videoUrl || "").trim(),
+      seoTitle: String(meta?.seoTitle || "").trim(),
+      seoDescription: String(meta?.seoDescription || "").trim(),
+      seoKeywords: String(meta?.seoKeywords || "").trim(),
       productsCount: 0
     });
   }
@@ -379,6 +394,9 @@ router.patch("/categories/:id", requireAdmin, async (req, res) => {
     const title = req.body?.title;
     const styleVariantRaw = req.body?.styleVariant;
     const videoUrl = req.body?.videoUrl;
+    const seoTitle = req.body?.seoTitle;
+    const seoDescription = req.body?.seoDescription;
+    const seoKeywords = req.body?.seoKeywords;
 
     const update = { category_id: id };
     if (image !== undefined) update.image = String(image || "");
@@ -387,6 +405,9 @@ router.patch("/categories/:id", requireAdmin, async (req, res) => {
       update.styleVariant = Number(styleVariantRaw) === 2 ? 2 : 1;
     }
     if (videoUrl !== undefined) update.videoUrl = String(videoUrl || "").trim();
+    if (seoTitle !== undefined) update.seoTitle = String(seoTitle || "").trim();
+    if (seoDescription !== undefined) update.seoDescription = String(seoDescription || "").trim();
+    if (seoKeywords !== undefined) update.seoKeywords = String(seoKeywords || "").trim();
 
     const saved = await CategoryMeta.findOneAndUpdate(
       { category_id: id },
@@ -411,7 +432,10 @@ router.patch("/categories/:id", requireAdmin, async (req, res) => {
         title: String(saved.title || ""),
         image: normalizeImageUrl(saved.image || ""),
         styleVariant: Number(saved.styleVariant) === 2 ? 2 : 1,
-        videoUrl: String(saved.videoUrl || "").trim()
+        videoUrl: String(saved.videoUrl || "").trim(),
+        seoTitle: String(saved.seoTitle || "").trim(),
+        seoDescription: String(saved.seoDescription || "").trim(),
+        seoKeywords: String(saved.seoKeywords || "").trim()
       }
     });
   } catch (e) {
@@ -435,7 +459,10 @@ router.post("/categories", requireAdmin, async (req, res) => {
     title: title || id,
     image: String(req.body?.image || "").trim(),
     styleVariant,
-    videoUrl: String(req.body?.videoUrl || "").trim()
+    videoUrl: String(req.body?.videoUrl || "").trim(),
+    seoTitle: String(req.body?.seoTitle || "").trim(),
+    seoDescription: String(req.body?.seoDescription || "").trim(),
+    seoKeywords: String(req.body?.seoKeywords || "").trim()
   });
 
   res.json({
@@ -446,6 +473,9 @@ router.post("/categories", requireAdmin, async (req, res) => {
       image: normalizeImageUrl(created.image),
       styleVariant: Number(created.styleVariant) === 2 ? 2 : 1,
       videoUrl: String(created.videoUrl || "").trim(),
+      seoTitle: String(created.seoTitle || "").trim(),
+      seoDescription: String(created.seoDescription || "").trim(),
+      seoKeywords: String(created.seoKeywords || "").trim(),
       productsCount: 0
     }
   });

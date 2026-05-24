@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { HashRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { Category, CartItem, Product, SiteSettings } from './types';
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -17,6 +17,19 @@ const ScrollToTop: React.FC = () => {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [pathname]);
+  return null;
+};
+
+// Keeps /#/admin working as a bookmark after switching to BrowserRouter.
+// On first load, if the hash contains a known route, we navigate there cleanly.
+const HashRedirect: React.FC = () => {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith('#/admin')) {
+      navigate('/admin', { replace: true });
+    }
+  }, []);
   return null;
 };
 
@@ -134,6 +147,7 @@ const App: React.FC = () => {
   return (
     <Router>
       <ScrollToTop />
+      <HashRedirect />
       <div className="flex flex-col min-h-screen relative overflow-x-hidden">
         <Header
           cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}

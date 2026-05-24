@@ -49,6 +49,9 @@ export interface Category {
   image?: string;
   styleVariant?: 1 | 2;
   videoUrl?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string;
   productsCount?: number;
 }
 
