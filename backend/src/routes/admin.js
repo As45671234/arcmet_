@@ -543,7 +543,8 @@ router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res
       buffer: file.buffer,
       filename: file.originalname || "",
       imagesDir: require("path").join(__dirname, "..", "..", "uploads", "products"),
-      supplier: resolvedSupplierMeta.id
+      supplier: resolvedSupplierMeta.id,
+      resolvedSupplierMeta
     });
 
     if (!items.length) {
@@ -640,7 +641,8 @@ router.post("/import/excel/chunk/:uploadId/complete", requireAdmin, async (req, 
       buffer: merged,
       filename,
       imagesDir: require("path").join(__dirname, "..", "..", "uploads", "products"),
-      supplier: resolvedSupplierMeta.id
+      supplier: resolvedSupplierMeta.id,
+      resolvedSupplierMeta
     });
 
     if (!items.length) {

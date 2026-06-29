@@ -689,10 +689,10 @@ function resolveEmbeddedImage({ imagesByRow, sheetName, excelRow, columnIndex, s
   return null;
 }
 
-async function workbookToProducts({ buffer, filename, imagesDir, supplier }) {
+async function workbookToProducts({ buffer, filename, imagesDir, supplier, resolvedSupplierMeta }) {
   const wb = XLSX.read(buffer, { type: "buffer" });
   const products = [];
-  const supplierMeta = supplier ? getImportSupplier(supplier) : null;
+  const supplierMeta = resolvedSupplierMeta || (supplier ? getImportSupplier(supplier) : null);
 
   const isXlsx = filename && String(filename).toLowerCase().endsWith(".xlsx");
   let imagesByRow = new Map();
