@@ -684,17 +684,30 @@ router.post("/import/excel/chunk/:uploadId/complete", requireAdmin, async (req, 
 });
 
 router.post("/upload/product-image", requireAdmin, (req, res) => {
-  imageUpload.single("file")(req, res, (err) => {
+  upload.single("file")(req, res, async (err) => {
     if (err && err.code === "LIMIT_FILE_SIZE") {
       return res.status(413).json({ error: "file too large" });
     }
     if (err) {
       return res.status(400).json({ error: "upload failed", details: String(err.message || err) });
     }
-
     if (!req.file) return res.status(400).json({ error: "file is required" });
-    const imageUrl = `/uploads/products/${req.file.filename}`;
-    return res.json({ ok: true, imageUrl });
+
+    try {
+      const sharp = require("sharp");
+      const webpBuf = await sharp(req.file.buffer).webp({ quality: 85 }).toBuffer();
+      const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
+      fs.mkdirSync(productImagesDir, { recursive: true });
+      fs.writeFileSync(path.join(productImagesDir, fileName), webpBuf);
+      return res.json({ ok: true, imageUrl: `/uploads/products/${fileName}` });
+    } catch (e) {
+      const ext = path.extname(String(req.file.originalname || "")).toLowerCase();
+      const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext) ? ext : ".jpg";
+      const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`;
+      fs.mkdirSync(productImagesDir, { recursive: true });
+      fs.writeFileSync(path.join(productImagesDir, fileName), req.file.buffer);
+      return res.json({ ok: true, imageUrl: `/uploads/products/${fileName}` });
+    }
   });
 });
 

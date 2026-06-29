@@ -5,6 +5,15 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
+async function convertToWebP(buf) {
+  try {
+    const sharp = require("sharp");
+    return await sharp(buf).webp({ quality: 85 }).toBuffer();
+  } catch (e) {
+    return buf;
+  }
+}
+
 
 async function extractImagesFromZip(buffer, imagesDir) {
   // Fallback: extract all xl/media/* images in order.
@@ -25,11 +34,10 @@ async function extractImagesFromZip(buffer, imagesDir) {
 
   for (const p of media) {
     try {
-      const ext = (p.split(".").pop() || "png").toLowerCase();
-      const safeExt = ["png","jpg","jpeg","webp","gif","bmp"].includes(ext) ? ext : "png";
-      const buf = await zip.file(p).async("nodebuffer");
-      const name = crypto.randomBytes(16).toString("hex") + "." + safeExt;
-      fs.writeFileSync(path.join(imagesDir, name), buf);
+      const raw = await zip.file(p).async("nodebuffer");
+      const webpBuf = await convertToWebP(raw);
+      const name = crypto.randomBytes(16).toString("hex") + ".webp";
+      fs.writeFileSync(path.join(imagesDir, name), webpBuf);
       out.push("/uploads/products/" + name);
     } catch (e) {
       // ignore
@@ -635,24 +643,23 @@ function uniqueNonEmpty(list) {
   return Array.from(new Set((list || []).map((item) => String(item || "").trim()).filter(Boolean)));
 }
 
-function saveEmbeddedImage({ imageObj, imagesDir, baseName }) {
+async function saveEmbeddedImage({ imageObj, imagesDir, baseName }) {
   if (!imageObj || !imageObj.buf || !imagesDir) return "";
   if (!fs.existsSync(imagesDir)) fs.mkdirSync(imagesDir, { recursive: true });
 
   const baseSlug = slugify(baseName || "image") || "image";
-  const ext = String(imageObj.ext || "png").toLowerCase();
-  const safeExt = ["png","jpg","jpeg","webp","gif","bmp"].includes(ext) ? ext : "png";
 
-  let fileName = `${baseSlug}.${safeExt}`;
+  let fileName = `${baseSlug}.webp`;
   let outPath = path.join(imagesDir, fileName);
   let idx = 2;
   while (fs.existsSync(outPath)) {
-    fileName = `${baseSlug}-${idx}.${safeExt}`;
+    fileName = `${baseSlug}-${idx}.webp`;
     outPath = path.join(imagesDir, fileName);
     idx++;
   }
 
-  fs.writeFileSync(outPath, imageObj.buf);
+  const webpBuf = await convertToWebP(imageObj.buf);
+  fs.writeFileSync(outPath, webpBuf);
   return `/uploads/products/${fileName}`;
 }
 
@@ -894,7 +901,7 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier, resol
           sameRowOnly: true,
           usedKeys: usedImageKeys
         });
-        const saved = saveEmbeddedImage({
+        const saved = await saveEmbeddedImage({
           imageObj: embedded,
           imagesDir,
           baseName: `${sku || name}-${columnIndex + 1}`
@@ -918,7 +925,7 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier, resol
             sameRowOnly: false,
             usedKeys: usedImageKeys
           });
-          const saved = saveEmbeddedImage({
+          const saved = await saveEmbeddedImage({
             imageObj: embedded,
             imagesDir,
             baseName: `${sku || name}-${fi + 1}`
