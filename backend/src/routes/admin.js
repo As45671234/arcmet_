@@ -119,6 +119,26 @@ async function resolveSupplierTitle(supplierMeta) {
   return title || supplierMeta.title;
 }
 
+async function resolveImportTarget(supplierValue) {
+  // 1. Direct category_id match in CategoryMeta (custom categories)
+  const meta = await CategoryMeta.findOne({ category_id: supplierValue }).lean();
+  if (meta) {
+    return { id: supplierValue, title: String(meta.title || supplierValue).trim() || supplierValue, aliases: [] };
+  }
+  // 2. Direct match via products (category exists but no meta yet)
+  const product = await Product.findOne({ category_id: supplierValue, active: true }).select("category_id category_title").lean();
+  if (product) {
+    return { id: supplierValue, title: String(product.category_title || supplierValue), aliases: [] };
+  }
+  // 3. Legacy: match via hardcoded IMPORT_SUPPLIERS aliases, then resolve title from CategoryMeta
+  const legacy = getImportSupplier(supplierValue);
+  if (legacy) {
+    const legacyTitle = await resolveSupplierTitle(legacy);
+    return { ...legacy, title: legacyTitle };
+  }
+  return null;
+}
+
 async function upsertImportedProducts(items, supplierMeta) {
   let inserted = 0;
   let updated = 0;
@@ -453,8 +473,8 @@ router.patch("/categories/:id", requireAdmin, async (req, res) => {
 router.post("/categories", requireAdmin, async (req, res) => {
   const title = String(req.body?.title || "").trim();
   const incomingId = String(req.body?.id || "").trim();
-  const id = incomingId || slugify(title);
-  if (!id) return res.status(400).json({ error: "category id or title required" });
+  const id = incomingId || String(Date.now());
+  if (!title) return res.status(400).json({ error: "category title required" });
 
   const exists = await CategoryMeta.findOne({ category_id: id }).lean();
   if (exists) return res.status(409).json({ error: "category already exists" });
@@ -513,13 +533,11 @@ router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res
     const file = req.file;
     if (!file) return res.status(400).json({ error: "file is required" });
     const supplier = String(req.body?.supplier || "").trim();
-    const supplierMeta = getImportSupplier(supplier);
+    const supplierMeta = await resolveImportTarget(supplier);
     if (!supplierMeta) {
       return res.status(400).json({ error: "supplier is required" });
     }
-
-    const resolvedTitle = await resolveSupplierTitle(supplierMeta);
-    const resolvedSupplierMeta = { ...supplierMeta, title: resolvedTitle };
+    const resolvedSupplierMeta = supplierMeta;
 
     const items = await workbookToProducts({
       buffer: file.buffer,
@@ -599,13 +617,11 @@ router.post("/import/excel/chunk/:uploadId/complete", requireAdmin, async (req, 
 
   try {
     const supplier = String(req.body?.supplier || "").trim();
-    const supplierMeta = getImportSupplier(supplier);
+    const supplierMeta = await resolveImportTarget(supplier);
     if (!supplierMeta) {
       return res.status(400).json({ error: "supplier is required" });
     }
-
-    const resolvedTitle = await resolveSupplierTitle(supplierMeta);
-    const resolvedSupplierMeta = { ...supplierMeta, title: resolvedTitle };
+    const resolvedSupplierMeta = supplierMeta;
 
     const filename = String(req.body?.filename || "import.xlsx");
     const parts = fs.readdirSync(dir)
