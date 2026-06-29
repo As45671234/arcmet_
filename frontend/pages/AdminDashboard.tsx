@@ -500,6 +500,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
   }, []);
 
   useEffect(() => {
+    if (activeTab !== 'import') return;
+    refreshAdmin();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  useEffect(() => {
     if (activeTab !== 'constructor') return;
     loadSiteSettings();
   // eslint-disable-next-line react-hooks/exhaustive-deps

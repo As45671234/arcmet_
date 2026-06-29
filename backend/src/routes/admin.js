@@ -113,6 +113,12 @@ function findDuplicateSkusInFile(items) {
   return Array.from(skuMap.values()).filter((x) => x.count > 1);
 }
 
+async function resolveSupplierTitle(supplierMeta) {
+  const meta = await CategoryMeta.findOne({ category_id: supplierMeta.id }).lean();
+  const title = meta && meta.title ? String(meta.title).trim() : "";
+  return title || supplierMeta.title;
+}
+
 async function upsertImportedProducts(items, supplierMeta) {
   let inserted = 0;
   let updated = 0;
@@ -512,11 +518,14 @@ router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res
       return res.status(400).json({ error: "supplier is required" });
     }
 
+    const resolvedTitle = await resolveSupplierTitle(supplierMeta);
+    const resolvedSupplierMeta = { ...supplierMeta, title: resolvedTitle };
+
     const items = await workbookToProducts({
       buffer: file.buffer,
       filename: file.originalname || "",
       imagesDir: require("path").join(__dirname, "..", "..", "uploads", "products"),
-      supplier: supplierMeta.id
+      supplier: resolvedSupplierMeta.id
     });
 
     if (!items.length) {
@@ -538,7 +547,7 @@ router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res
       });
     }
 
-    const { inserted, updated, skipped } = await upsertImportedProducts(items, supplierMeta);
+    const { inserted, updated, skipped } = await upsertImportedProducts(items, resolvedSupplierMeta);
 
     res.json({
       ok: true,
@@ -546,7 +555,7 @@ router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res
       updated,
       skipped,
       totalParsed: items.length,
-      supplier: supplierMeta,
+      supplier: resolvedSupplierMeta,
       durationMs: Date.now() - t0
     });
   } catch (e) {
@@ -595,6 +604,9 @@ router.post("/import/excel/chunk/:uploadId/complete", requireAdmin, async (req, 
       return res.status(400).json({ error: "supplier is required" });
     }
 
+    const resolvedTitle = await resolveSupplierTitle(supplierMeta);
+    const resolvedSupplierMeta = { ...supplierMeta, title: resolvedTitle };
+
     const filename = String(req.body?.filename || "import.xlsx");
     const parts = fs.readdirSync(dir)
       .filter((name) => /^\d+\.part$/.test(name))
@@ -612,7 +624,7 @@ router.post("/import/excel/chunk/:uploadId/complete", requireAdmin, async (req, 
       buffer: merged,
       filename,
       imagesDir: require("path").join(__dirname, "..", "..", "uploads", "products"),
-      supplier: supplierMeta.id
+      supplier: resolvedSupplierMeta.id
     });
 
     if (!items.length) {
@@ -634,7 +646,7 @@ router.post("/import/excel/chunk/:uploadId/complete", requireAdmin, async (req, 
       });
     }
 
-    const { inserted, updated, skipped } = await upsertImportedProducts(items, supplierMeta);
+    const { inserted, updated, skipped } = await upsertImportedProducts(items, resolvedSupplierMeta);
 
     res.json({
       ok: true,
@@ -642,7 +654,7 @@ router.post("/import/excel/chunk/:uploadId/complete", requireAdmin, async (req, 
       updated,
       skipped,
       totalParsed: items.length,
-      supplier: supplierMeta,
+      supplier: resolvedSupplierMeta,
       durationMs: Date.now() - t0,
       chunked: true
     });
