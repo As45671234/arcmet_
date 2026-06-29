@@ -285,13 +285,7 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
 
   const activeCategory = categories.find((c) => c.id === selectedCatId);
   const q = searchQuery.trim().toLowerCase();
-  const activeSubcategories = Array.from<string>(
-    new Set<string>(
-      (activeCategory?.items || [])
-        .map((p) => normalizeSubcategory(p.brandOrGroup || ''))
-        .filter(Boolean)
-    )
-  ).sort((a, b) => a.localeCompare(b, 'ru'));
+
 
   const formatAttrsInline = (attrs: Record<string, any> = {}, limit = 3) =>
     normalizeAttrEntries(attrs)
@@ -400,8 +394,8 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
     <div className="container mx-auto px-6 py-12">
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Sidebar */}
-        <aside className={`flex-shrink-0 transition-all duration-300 ${sidebarOpen ? 'w-full lg:w-72' : 'w-full lg:w-14'}`}>
-          <div className="sticky top-32">
+        <aside className={`flex-shrink-0 self-start sticky top-28 transition-all duration-300 ${sidebarOpen ? 'w-full lg:w-72' : 'w-full lg:w-14'}`}>
+          <div className="max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden">
             {/* Header row with toggle */}
             <div className="flex items-center justify-between mb-4">
               {sidebarOpen && (
@@ -587,25 +581,6 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                 </div>
               ) : null}
 
-              {activeSubcategories.length > 0 ? (
-                <div className="rounded-2xl bg-white border border-gray-200 p-3 flex flex-wrap gap-2">
-                  {activeSubcategories.map((sub) => (
-                    <button
-                      key={sub}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSub(sub);
-                        const next = new URLSearchParams(searchParams);
-                        next.set('sub', sub);
-                        setSearchParams(next);
-                      }}
-                      className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-colors ${selectedSub === sub ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
-                    >
-                      {sub}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
             </div>
           ) : null}
 

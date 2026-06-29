@@ -788,7 +788,7 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier, resol
     const ws = wb.Sheets[sheetName];
     if (!ws) continue;
 
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "", cellText: false });
 
     let currentCategoryTitle = supplierMeta ? supplierMeta.title : String(sheetName || "Каталог").trim();
     let currentGroup = "";
@@ -820,22 +820,13 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier, resol
         continue;
       }
 
-      // After headerMap is found, single-cell rows are still checked as potential group labels
-      // only if they don't look like a product name (i.e. no digits, no Latin chars, very short).
+      // After headerMap is found, single-cell rows are treated as group/subcategory labels
+      // as long as the title is short and contains no digits (product names always have
+      // accompanying data: characteristics, SKU, price — so nonEmpty > 1 for real products).
       if (nonEmpty === 1 && headerMap) {
         const title = String(row.find((c) => String(c || "").trim()) || "").trim();
 
-        // ALL-CAPS multi-word rows (e.g. "ПВХ-МЕМБРАНА ДЛЯ КРОВЛИ") are always subcategory headers
-        // regardless of length or supplier context.
-        const lettersOnly = title.replace(/[^\p{L}]+/gu, "");
-        const isAllCapsGroup = lettersOnly.length >= 4 && title === title.toUpperCase() && title.includes(" ") && !/\d/.test(title);
-        if (isAllCapsGroup) {
-          currentGroup = title;
-          continue;
-        }
-
-        const looksLikeLabel = title.length < 80 && !/\d/.test(title) && !/[a-zA-Z]{3}/.test(title);
-        if (looksLikeLabel && looksLikeCategoryTitle(title, currentCategoryTitle)) {
+        if (title.length < 80 && !/\d/.test(title)) {
           currentGroup = title;
           continue;
         }
@@ -969,8 +960,8 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier, resol
       if (headerMap.characteristics !== undefined) {
         const charStr = String(row[headerMap.characteristics] || "").trim();
         if (charStr) {
-          // Support both ";" and newline separators
-          const pairs = charStr.split(/[;\n]+/);
+          // Support ";", newline, and carriage return as separators
+          const pairs = charStr.split(/[;\r\n]+/);
           for (const pair of pairs) {
             const colonIdx = pair.indexOf(":");
             if (colonIdx < 1) continue;
