@@ -542,7 +542,7 @@ router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res
     const items = await workbookToProducts({
       buffer: file.buffer,
       filename: file.originalname || "",
-      imagesDir: require("path").join(__dirname, "..", "..", "uploads", "products"),
+      imagesDir: productImagesDir,
       supplier: resolvedSupplierMeta.id,
       resolvedSupplierMeta
     });
@@ -640,7 +640,7 @@ router.post("/import/excel/chunk/:uploadId/complete", requireAdmin, async (req, 
     const items = await workbookToProducts({
       buffer: merged,
       filename,
-      imagesDir: require("path").join(__dirname, "..", "..", "uploads", "products"),
+      imagesDir: productImagesDir,
       supplier: resolvedSupplierMeta.id,
       resolvedSupplierMeta
     });
@@ -695,7 +695,7 @@ router.post("/upload/product-image", requireAdmin, (req, res) => {
 
     try {
       const sharp = require("sharp");
-      const webpBuf = await sharp(req.file.buffer).webp({ quality: 85 }).toBuffer();
+      const webpBuf = await sharp(req.file.buffer).webp({ quality: 75, effort: 2 }).toBuffer();
       const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
       fs.mkdirSync(productImagesDir, { recursive: true });
       fs.writeFileSync(path.join(productImagesDir, fileName), webpBuf);

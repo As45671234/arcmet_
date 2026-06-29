@@ -8,7 +8,7 @@ const crypto = require("crypto");
 async function convertToWebP(buf) {
   try {
     const sharp = require("sharp");
-    return await sharp(buf).webp({ quality: 85 }).toBuffer();
+    return await sharp(buf).webp({ quality: 75, effort: 2 }).toBuffer();
   } catch (e) {
     return buf;
   }
