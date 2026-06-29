@@ -148,7 +148,7 @@ const App: React.FC = () => {
     <Router>
       <ScrollToTop />
       <HashRedirect />
-      <div className="flex flex-col min-h-screen relative overflow-x-hidden">
+      <div className="flex flex-col min-h-screen relative overflow-x-clip">
         <Header
           cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
           categories={categories}
