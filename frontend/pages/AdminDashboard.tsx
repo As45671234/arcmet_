@@ -1098,17 +1098,19 @@ useEffect(() => {
             <p className="text-gray-400 max-w-2xl mx-auto mb-10 font-medium">Сначала выберите поставщика, затем загрузите Excel в шаблоне с колонками: Номенклатура, Количество, Описание, Картинка 1-3, Артикул, Цена. Если колонка единицы измерения отсутствует, будет использовано значение "шт".</p>
 
             <div className="max-w-4xl mx-auto mb-10 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 text-left">
-              {IMPORT_SUPPLIERS.map((supplier) => {
-                const isActive = selectedImportSupplier === supplier.id;
+              {adminCategories.map((cat: any) => {
+                const catId = String(cat.id || '');
+                const catTitle = String(cat.title || catId);
+                const isActive = selectedImportSupplier === catId;
                 return (
                   <button
-                    key={supplier.id}
+                    key={catId}
                     type="button"
-                    onClick={() => setSelectedImportSupplier(supplier.id)}
+                    onClick={() => setSelectedImportSupplier(catId)}
                     className={`rounded-3xl border px-6 py-5 transition-all ${isActive ? 'border-blue-600 bg-blue-600 text-white shadow-xl shadow-blue-100' : 'border-gray-200 bg-gray-50 text-blue-900 hover:border-blue-300 hover:bg-blue-50'}`}
                   >
                     <div className="text-[11px] uppercase tracking-[0.3em] font-black opacity-70 mb-2">Поставщик</div>
-                    <div className="text-lg font-black tracking-tight">{supplier.title}</div>
+                    <div className="text-lg font-black tracking-tight">{catTitle}</div>
                   </button>
                 );
               })}
@@ -1124,7 +1126,7 @@ useEffect(() => {
             </label>
             {selectedImportSupplier ? (
               <p className="mt-5 text-sm text-blue-700 font-semibold">
-                Импорт будет выполнен в категорию {IMPORT_SUPPLIERS.find((item) => item.id === selectedImportSupplier)?.title || selectedImportSupplier}.
+                Импорт будет выполнен в категорию {(adminCategories.find((c: any) => String(c.id || '') === selectedImportSupplier) as any)?.title || selectedImportSupplier}.
               </p>
             ) : null}
           </div>
