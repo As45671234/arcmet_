@@ -411,12 +411,9 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
   return (
     <div className="container mx-auto px-6 py-12">
       <div className="flex flex-col lg:flex-row gap-8">
-        {/* Sidebar spacer (desktop only — holds space for the fixed sidebar) */}
-        <div className={`hidden lg:block flex-shrink-0 transition-all duration-300 ${sidebarOpen ? 'lg:w-72' : 'lg:w-14'}`} aria-hidden="true" />
-
-        {/* Sidebar — fixed on desktop, normal on mobile */}
-        <aside className={`lg:fixed lg:top-32 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto transition-all duration-300 ${sidebarOpen ? 'w-full lg:w-72' : 'w-full lg:w-14'}`}>
-          <div className="lg:pb-8">
+        {/* Sidebar — sticky on desktop, normal on mobile */}
+        <aside className={`self-start lg:sticky lg:top-32 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto transition-all duration-300 ${sidebarOpen ? 'w-full lg:w-72' : 'w-full lg:w-14'}`}>
+          <div className="lg:pb-4">
             {/* Header row with toggle */}
             <div className="flex items-center justify-between mb-4">
               {sidebarOpen && (
