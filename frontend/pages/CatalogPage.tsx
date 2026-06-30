@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Category, Product } from '../types';
 import noPhotoImage from '../components/img/no photo/no-photo.svg';
@@ -126,28 +126,43 @@ const toEmbedUrl = (raw: string) => {
 };
 
 const parseInlineSpecPairs = (text: string) => {
-  // Normalize: fullwidth semicolon ；(U+FF1B), CRLF → LF, Greek question mark ；
   const src = String(text || '')
-    .replace(/；|;/g, ';')
+    .replace(/；|;|﹔/g, ';')
     .replace(/\r\n?/g, '\n')
     .trim();
   if (!src) return [] as Array<[string, string]>;
 
   const result: Array<[string, string]> = [];
 
-  // Prefer semicolon/newline split for Excel-style "Ключ: Значение; ..."
-  const semicolonParts = src.split(/[;\n]+/).map((x) => x.trim()).filter(Boolean);
-  if (semicolonParts.length > 1 && semicolonParts.every((part) => part.includes(':'))) {
-    for (const part of semicolonParts) {
-      const idx = part.indexOf(':');
-      const k = part.slice(0, idx).trim();
-      const v = part.slice(idx + 1).trim();
-      if (k && v) result.push([k, v]);
+  // Split by known separators: ; \n | bullet
+  for (const sep of [/[;\n]+/, /\|+/, /[•·]+/]) {
+    const parts = src.split(sep).map((x) => x.trim()).filter(Boolean);
+    if (parts.length > 1 && parts.every((p) => p.includes(':'))) {
+      for (const part of parts) {
+        const idx = part.indexOf(':');
+        const k = part.slice(0, idx).trim();
+        const v = part.slice(idx + 1).trim();
+        if (k && v) result.push([k, v]);
+      }
+      if (result.length > 1) return result;
+      result.length = 0;
     }
-    return result;
   }
 
-  // Fallback for comma-separated style: "Ключ: Значение, Ключ2: Значение2"
+  // Pattern-based: works with ANY separator — finds Key: Value by lookahead on next key
+  const kvRe = /([А-Яа-яёЁA-Za-z][А-Яа-яёЁA-Za-z\s]{1,50}?):\s*([\s\S]+?)(?=\s*[А-ЯЁA-Z][А-Яа-яёЁA-Za-z\s]{1,50}?:|$)/g;
+  const matches = [...src.matchAll(kvRe)];
+  if (matches.length > 1) {
+    for (const m of matches) {
+      const k = m[1].trim();
+      const v = m[2].trim().replace(/[;\s]+$/, '');
+      if (k && v) result.push([k, v]);
+    }
+    if (result.length > 1) return result;
+    result.length = 0;
+  }
+
+  // Fallback: comma-separated
   const commaParts = src.split(',').map((x) => x.trim()).filter(Boolean);
   if (commaParts.length > 1 && commaParts.every((part) => part.includes(':'))) {
     for (const part of commaParts) {
@@ -161,7 +176,6 @@ const parseInlineSpecPairs = (text: string) => {
 
   return result;
 };
-
 const parseLegacySpecPairs = (text: string) => {
   const src = String(text || '').replace(/\s+/g, ' ').trim();
   if (!src) return [] as Array<[string, string]>;
