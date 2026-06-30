@@ -958,10 +958,13 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier, resol
 
       // Parse "Характеристики" column: "Ключ: Значение; Ключ2: Значение2"
       if (headerMap.characteristics !== undefined) {
-        const charStr = String(row[headerMap.characteristics] || "").trim();
+        const charStr = String(row[headerMap.characteristics] || "")
+          .replace(/；|;/g, ";")  // normalize fullwidth semicolon
+          .replace(/\r\n?/g, "\n")
+          .trim();
         if (charStr) {
           // Support ";", newline, and carriage return as separators
-          const pairs = charStr.split(/[;\r\n]+/);
+          const pairs = charStr.split(/[;\n]+/);
           for (const pair of pairs) {
             const colonIdx = pair.indexOf(":");
             if (colonIdx < 1) continue;

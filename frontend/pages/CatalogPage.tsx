@@ -126,7 +126,11 @@ const toEmbedUrl = (raw: string) => {
 };
 
 const parseInlineSpecPairs = (text: string) => {
-  const src = String(text || '').trim();
+  // Normalize: fullwidth semicolon ；(U+FF1B), CRLF → LF, Greek question mark ；
+  const src = String(text || '')
+    .replace(/；|;/g, ';')
+    .replace(/\r\n?/g, '\n')
+    .trim();
   if (!src) return [] as Array<[string, string]>;
 
   const result: Array<[string, string]> = [];
@@ -392,10 +396,13 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
 
   return (
     <div className="container mx-auto px-6 py-12">
-      <div className={`flex flex-col gap-8 lg:grid lg:items-start ${sidebarOpen ? 'lg:grid-cols-[18rem_1fr]' : 'lg:grid-cols-[3.5rem_1fr]'}`}>
-        {/* Sidebar */}
-        <aside className={`self-start lg:sticky lg:top-32 transition-all duration-300 ${sidebarOpen ? 'w-full lg:w-72' : 'w-full lg:w-14'}`}>
-          <div>
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* Sidebar spacer (desktop only — holds space for the fixed sidebar) */}
+        <div className={`hidden lg:block flex-shrink-0 transition-all duration-300 ${sidebarOpen ? 'lg:w-72' : 'lg:w-14'}`} aria-hidden="true" />
+
+        {/* Sidebar — fixed on desktop, normal on mobile */}
+        <aside className={`lg:fixed lg:top-32 lg:bottom-0 lg:overflow-y-auto transition-all duration-300 ${sidebarOpen ? 'w-full lg:w-72' : 'w-full lg:w-14'}`}>
+          <div className="lg:pb-8">
             {/* Header row with toggle */}
             <div className="flex items-center justify-between mb-4">
               {sidebarOpen && (
