@@ -210,7 +210,7 @@ const normalizeAttrEntries = (attrs: Record<string, any> = {}) => {
     }
 
     const keyLow = String(rawKey || '').toLowerCase();
-    if (keyLow === 'specs_text' || keyLow.includes('характер')) {
+    if (keyLow === 'specs_text' || keyLow.includes('характ')) {
       const legacyPairs = parseLegacySpecPairs(value);
       if (legacyPairs.length > 0) {
         for (const [k, v] of legacyPairs) out.push([k, v]);
