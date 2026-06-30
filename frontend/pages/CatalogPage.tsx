@@ -76,6 +76,52 @@ const buildProductSeoKeywords = (product: Product, categoryTitle: string) => {
     .join(', ');
 };
 
+const buildCategoryDynamicSeo = (category: Category, products: Product[]) => {
+  const categoryTitle = formatSeoValue(category.title || 'Каталог товаров');
+  const total = products.length;
+
+  const productNames = Array.from(new Set(
+    products.slice(0, 10).map(p => formatSeoValue(p.name)).filter(Boolean)
+  )).slice(0, 5);
+
+  const groups = Array.from(new Set(
+    products.map(p => formatSeoValue(p.brandOrGroup)).filter(Boolean)
+  )).slice(0, 3);
+
+  const thicknesses = Array.from(new Set(
+    products.map(p => p.attrs?.thickness_mm).filter(Boolean).map(String)
+  )).sort((a, b) => Number(a) - Number(b)).slice(0, 6);
+
+  const attrValues = Array.from(new Set(
+    products.flatMap(p =>
+      Object.values(p.attrs || {}).map(v => formatSeoValue(String(v || '')))
+    ).filter(v => v.length > 0 && v.length < 25)
+  )).slice(0, 8);
+
+  const totalWord = total === 1 ? 'товар' : total < 5 ? 'товара' : 'товаров';
+  const thicknessNote = thicknesses.length > 1 ? ` Толщины: ${thicknesses.join(', ')} мм.` : '';
+  const productNote = productNames.length > 0
+    ? ` Позиции: ${productNames.slice(0, 3).join(', ')}.`
+    : '';
+
+  const title = `${categoryTitle} — купить в Казахстане | ARCMET`;
+  const description = `Купить ${categoryTitle} в Казахстане — ${total} ${totalWord} от официального дистрибьютора ARCMET.${productNote}${thicknessNote} Доставка по Алматы и РК. Оптовые цены.`.slice(0, 320);
+  const keywords = Array.from(new Set([
+    categoryTitle,
+    `${categoryTitle} казахстан`,
+    `${categoryTitle} алматы`,
+    `купить ${categoryTitle}`,
+    `${categoryTitle} цена`,
+    ...groups,
+    ...productNames.slice(0, 5),
+    ...attrValues.slice(0, 5),
+    'ARCMET',
+    'строительные материалы казахстан',
+  ].map(formatSeoValue).filter(Boolean))).slice(0, 18).join(', ');
+
+  return { title, description, keywords };
+};
+
 const buildProductStructuredData = (product: Product, categoryTitle: string) => {
   const image = getSeoProductImages(product)[0] || noPhotoImage;
   const hasPrice = Number.isFinite(Number(product.prices?.retail));
@@ -390,10 +436,14 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
       });
     }
 
-    const seoTitle = formatSeoValue(activeCategory?.seoTitle || '') || `${categoryTitle} | Каталог ARCMET`;
-    const seoDescription = formatSeoValue(activeCategory?.seoDescription || '') ||
-      `Каталог ARCMET: ${totalProducts} товаров в категории ${categoryTitle}. Подбор строительных материалов, теплоизоляции и гидроизоляции под текущие задачи и характеристики.`;
-    const seoKeywords = formatSeoValue(activeCategory?.seoKeywords || '') ||
+    const dynamic = activeCategory && !activeCategory.seoTitle && !activeCategory.seoDescription
+      ? buildCategoryDynamicSeo(activeCategory, activeCategory.items || [])
+      : null;
+
+    const seoTitle = formatSeoValue(activeCategory?.seoTitle || '') || dynamic?.title || `${categoryTitle} | Каталог ARCMET`;
+    const seoDescription = formatSeoValue(activeCategory?.seoDescription || '') || dynamic?.description ||
+      `Каталог ARCMET: ${totalProducts} товаров в категории ${categoryTitle}. Подбор строительных материалов, теплоизоляции и гидроизоляции.`;
+    const seoKeywords = formatSeoValue(activeCategory?.seoKeywords || '') || dynamic?.keywords ||
       [categoryTitle, 'каталог', 'строительные материалы', 'теплоизоляция', 'гидроизоляция', 'ARCMET'].join(', ');
 
     return applySeo({
@@ -406,7 +456,7 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
       ogUrl: `https://arcmet.kz/catalog?cat=${encodeURIComponent(activeCategory?.id || '')}`,
       twitterCard: 'summary_large_image',
     });
-  }, [activeCategory?.title, filteredProducts.length, selectedProduct]);
+  }, [activeCategory, filteredProducts.length, selectedProduct]);
 
   return (
     <div className="container mx-auto px-6 py-12">
