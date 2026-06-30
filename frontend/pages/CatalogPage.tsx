@@ -392,9 +392,9 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
 
   return (
     <div className="container mx-auto px-6 py-12">
-      <div className="flex flex-col lg:flex-row gap-8">
+      <div className={`flex flex-col gap-8 lg:grid lg:items-start ${sidebarOpen ? 'lg:grid-cols-[18rem_1fr]' : 'lg:grid-cols-[3.5rem_1fr]'}`}>
         {/* Sidebar */}
-        <aside className={`flex-shrink-0 self-start lg:sticky lg:top-32 transition-all duration-300 ${sidebarOpen ? 'w-full lg:w-72' : 'w-full lg:w-14'}`}>
+        <aside className={`self-start lg:sticky lg:top-32 transition-all duration-300 ${sidebarOpen ? 'w-full lg:w-72' : 'w-full lg:w-14'}`}>
           <div>
             {/* Header row with toggle */}
             <div className="flex items-center justify-between mb-4">
