@@ -746,7 +746,7 @@ router.post("/products", requireAdmin, async (req, res) => {
 
   if (!category_title || !name) return res.status(400).json({ error: "category_title and name are required" });
 
-  const category_id = slugify(category_title);
+  const category_id = String(body.category_id || "").trim() || slugify(category_title);
   const sku = String(body.sku || "").trim();
   const supplier_id = String(body.supplier_id || category_id).trim() || category_id;
   const supplier_title = String(body.supplier_title || category_title).trim() || category_title;

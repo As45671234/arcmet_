@@ -118,6 +118,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ setCategories, onLogout
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editId, setEditId] = useState<string>('');
   const [addForm, setAddForm] = useState({
+    category_id: '',
     category_title: '',
     name: '',
     brandOrGroup: '',
@@ -761,6 +762,7 @@ useEffect(() => {
 
   const openAddModal = () => {
     setAddForm({
+      category_id: '',
       category_title: '',
       name: '',
       brandOrGroup: '',
@@ -955,6 +957,7 @@ useEffect(() => {
     }
 
     const payload: any = {
+      category_id: addForm.category_id.trim() || undefined,
       category_title,
       name,
       brandOrGroup: addForm.brandOrGroup.trim(),
@@ -2547,12 +2550,23 @@ useEffect(() => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
                   <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Категория</div>
-                  <input
-                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
-                    value={addForm.category_title}
-                    onChange={(e) => setAddForm({ ...addForm, category_title: e.target.value })}
-                    placeholder="Например: Утеплитель"
-                  />
+                  <select
+                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm appearance-none"
+                    value={addForm.category_id}
+                    onChange={(e) => {
+                      const selected = adminCategories.find((c: any) => c.id === e.target.value);
+                      setAddForm({
+                        ...addForm,
+                        category_id: selected ? String(selected.id) : '',
+                        category_title: selected ? String(selected.title) : '',
+                      });
+                    }}
+                  >
+                    <option value="">— Выберите категорию —</option>
+                    {adminCategories.map((cat: any) => (
+                      <option key={cat.id} value={cat.id}>{cat.title}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Наименование</div>
@@ -2564,15 +2578,6 @@ useEffect(() => {
                   />
                 </div>
 
-                <div>
-                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Группа / Бренд</div>
-                  <input
-                    className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-200 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-sm"
-                    value={addForm.brandOrGroup}
-                    onChange={(e) => setAddForm({ ...addForm, brandOrGroup: e.target.value })}
-                    placeholder="Например: Protan"
-                  />
-                </div>
                 <div>
                   <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Артикул</div>
                   <input
