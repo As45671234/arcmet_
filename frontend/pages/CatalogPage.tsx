@@ -287,9 +287,12 @@ const normalizeAttrEntries = (attrs: Record<string, any> = {}) => {
 interface CatalogPageProps {
   categories: Category[];
   onAddToCart: (p: Product) => void;
+  // Пустой каталог и недоступный сервер — разные вещи, и выглядеть они
+  // обязаны по-разному.
+  catalogState?: 'loading' | 'ready' | 'error';
 }
 
-const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) => {
+const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart, catalogState = 'ready' }) => {
   const hasWhatsapp = String(import.meta.env.VITE_WHATSAPP_PHONE || '').replace(/[^\d]/g, '').length > 0;
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedCatId, setSelectedCatId] = useState<string>('');
@@ -603,7 +606,13 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
               <h1 className="text-4xl font-black text-blue-900 uppercase tracking-tighter">
                 {activeCategory?.title || 'Все товары'}
               </h1>
-              <p className="text-gray-500 mt-2">Найдено {filteredProducts.length} наименований</p>
+              <p className="text-gray-500 mt-2">
+                {catalogState === 'loading'
+                  ? 'Загружаем каталог…'
+                  : catalogState === 'error'
+                    ? 'Каталог временно недоступен'
+                    : `Найдено ${filteredProducts.length} наименований`}
+              </p>
             </div>
             <div className="relative w-full md:w-96">
               <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
@@ -753,6 +762,30 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ categories, onAddToCart }) =>
                   </div>
                 </div>
               ))}
+            </div>
+          ) : catalogState === 'loading' ? (
+            <div className="bg-white rounded-3xl p-20 text-center border-2 border-dashed border-gray-200">
+              <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-300 text-3xl">
+                <i className="fas fa-spinner fa-spin"></i>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-400">Загружаем каталог</h3>
+            </div>
+          ) : catalogState === 'error' ? (
+            <div className="bg-white rounded-3xl p-20 text-center border-2 border-dashed border-amber-200">
+              <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-6 text-amber-400 text-3xl">
+                <i className="fas fa-triangle-exclamation"></i>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-600">Каталог временно недоступен</h3>
+              <p className="text-gray-500 mt-2 max-w-md mx-auto">
+                Не удалось связаться с сервером. Товары на месте — попробуйте обновить страницу через минуту.
+              </p>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-6 px-6 py-3 rounded-xl bg-blue-900 text-white font-black uppercase tracking-widest text-xs hover:bg-blue-800 transition-colors"
+              >
+                Обновить
+              </button>
             </div>
           ) : (
             <div className="bg-white rounded-3xl p-20 text-center border-2 border-dashed border-gray-200">

@@ -35,6 +35,7 @@ const HashRedirect: React.FC = () => {
 
 const App: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [catalogState, setCatalogState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
@@ -81,8 +82,18 @@ const App: React.FC = () => {
   // Catalog from backend
   useEffect(() => {
     fetchCatalog()
-      .then((data) => setCategories((data.categories || []) as any))
-      .catch(() => setCategories([]));
+      .then((data) => {
+        setCategories((data.categories || []) as any);
+        setCatalogState('ready');
+      })
+      .catch(() => {
+        // Здесь был просто setCategories([]). Из-за этого недоступный backend
+        // выглядел на сайте как «Найдено 0 наименований» — неотличимо от
+        // пустого каталога. Менеджеры решали, что товары пропали, и заново
+        // импортировали прайсы, которые никуда не девались.
+        setCategories([]);
+        setCatalogState('error');
+      });
   }, []);
 
   // Site settings
@@ -175,7 +186,7 @@ const App: React.FC = () => {
             <Route path="/" element={<HomePage categories={categories} onAddToCart={addToCart} siteSettings={siteSettings} />} />
             <Route
               path="/catalog"
-              element={<CatalogPage categories={categories} onAddToCart={addToCart} />}
+              element={<CatalogPage categories={categories} onAddToCart={addToCart} catalogState={catalogState} />}
             />
             <Route
               path="/cart"

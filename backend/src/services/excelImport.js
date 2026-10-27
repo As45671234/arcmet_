@@ -15,36 +15,18 @@ async function convertToWebP(buf) {
 }
 
 
-async function extractImagesFromZip(buffer, imagesDir) {
-  // Fallback: extract all xl/media/* images in order.
-  // Returns array of saved URL paths.
-  const out = [];
+// Один .xlsx — это zip-архив. Распаковка стоит сотни мегабайт на крупных
+// прайсах, поэтому экземпляр JSZip загружается один раз и переиспользуется
+// всеми извлекателями картинок.
+async function loadZipSafe(buffer) {
   let JSZip;
-  try { JSZip = require("jszip"); } catch (e) { return out; }
+  try { JSZip = require("jszip"); } catch (e) { return null; }
 
-  if (!imagesDir) return out;
-  if (!fs.existsSync(imagesDir)) fs.mkdirSync(imagesDir, { recursive: true });
-
-  let zip;
-  try { zip = await JSZip.loadAsync(buffer); } catch (e) { return out; }
-
-  const media = Object.keys(zip.files)
-    .filter((p) => /^xl\/media\//i.test(p) && /\.(png|jpe?g|webp|gif|bmp)$/i.test(p))
-    .sort();
-
-  for (const p of media) {
-    try {
-      const raw = await zip.file(p).async("nodebuffer");
-      const webpBuf = await convertToWebP(raw);
-      const name = crypto.randomBytes(16).toString("hex") + ".webp";
-      fs.writeFileSync(path.join(imagesDir, name), webpBuf);
-      out.push("/uploads/products/" + name);
-    } catch (e) {
-      // ignore
-    }
+  try {
+    return await JSZip.loadAsync(buffer);
+  } catch (e) {
+    return null;
   }
-
-  return out;
 }
 
 function pickText(xml, tag) {
@@ -79,16 +61,14 @@ function cellRefToRowCol(cellRef) {
   return { row, col };
 }
 
-async function extractImagesXlsx(buffer) {
+async function extractImagesXlsx(buffer, sharedZip) {
   // Returns map:
   //  - `${sheetName}|${row}` -> { buf, ext }
   //  - `${sheetName}|${row}|${col}` -> { buf, ext }
   const map = new Map();
-  let JSZip;
-  try { JSZip = require("jszip"); } catch (e) { return map; }
 
-  let zip;
-  try { zip = await JSZip.loadAsync(buffer); } catch (e) { return map; }
+  const zip = sharedZip || await loadZipSafe(buffer);
+  if (!zip) return map;
 
   // workbook: map sheet rid -> { name, sheetPath }
   const workbookXml = zip.file("xl/workbook.xml") ? await zip.file("xl/workbook.xml").async("string") : "";
@@ -259,13 +239,11 @@ async function extractImagesXlsx(buffer) {
   return map;
 }
 
-async function extractRichValueImagesXlsx(buffer) {
+async function extractRichValueImagesXlsx(buffer, sharedZip) {
   const map = new Map();
-  let JSZip;
-  try { JSZip = require("jszip"); } catch (e) { return map; }
 
-  let zip;
-  try { zip = await JSZip.loadAsync(buffer); } catch (e) { return map; }
+  const zip = sharedZip || await loadZipSafe(buffer);
+  if (!zip) return map;
 
   const richValueRelXml = zip.file("xl/richData/richValueRel.xml")
     ? await zip.file("xl/richData/richValueRel.xml").async("string")
@@ -712,32 +690,36 @@ async function workbookToProducts({ buffer, filename, imagesDir, supplier, resol
   };
 
   if (isXlsx) {
-    let richMap = new Map();
-    let excelJsMap = new Map();
-    let zipDrawingMap = new Map();
+    // Some files are only partially handled by one parser, поэтому проходов
+    // по-прежнему три. Но zip распаковывается один раз на всех, а каждая карта
+    // сливается и освобождается сразу: держать все три одновременно означало
+    // втрое больше распакованных картинок в памяти. Порядок слияния сохранён —
+    // при совпадении ключей выигрывает первый источник.
+    const sharedZip = await loadZipSafe(buffer);
+    let sourceMap = null;
 
     try {
-      richMap = await extractRichValueImagesXlsx(buffer);
+      sourceMap = await extractRichValueImagesXlsx(buffer, sharedZip);
     } catch (e) {
-      richMap = new Map();
+      sourceMap = null;
     }
+    mergeImageMaps(imagesByRow, sourceMap);
 
     try {
-      excelJsMap = await extractImagesExcelJs(buffer);
+      sourceMap = await extractImagesExcelJs(buffer);
     } catch (e) {
-      excelJsMap = new Map();
+      sourceMap = null;
     }
+    mergeImageMaps(imagesByRow, sourceMap);
 
     try {
-      zipDrawingMap = await extractImagesXlsx(buffer);
+      sourceMap = await extractImagesXlsx(buffer, sharedZip);
     } catch (e) {
-      zipDrawingMap = new Map();
+      sourceMap = null;
     }
+    mergeImageMaps(imagesByRow, sourceMap);
 
-    // Some files are only partially handled by one parser. Merge all extracted keys.
-    mergeImageMaps(imagesByRow, richMap);
-    mergeImageMaps(imagesByRow, excelJsMap);
-    mergeImageMaps(imagesByRow, zipDrawingMap);
+    sourceMap = null;
   }
 
 

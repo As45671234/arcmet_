@@ -7,7 +7,7 @@ const rateLimit = require("express-rate-limit");
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
-const { connectDb } = require("./config/db");
+const { connectDb, isDbReady } = require("./config/db");
 
 const publicRoutes = require("./routes/public");
 const adminRoutes = require("./routes/admin");
@@ -43,10 +43,24 @@ const emailLimiter = rateLimit({
   legacyHeaders: false
 });
 
+// Пока база не поднялась, запросы к данным должны получать внятный отказ,
+// а не зависать и не падать с пятисоткой. Статика выше по стеку, её это
+// не касается — картинки продолжают отдаваться.
+app.use("/api", (req, res, next) => {
+  if (isDbReady()) return next();
+  res.status(503).json({
+    error: "database_unavailable",
+    message: "База данных временно недоступна. Повторите запрос через минуту."
+  });
+});
+
 app.use("/api", publicRoutes(emailLimiter));
 app.use("/api/admin", adminRoutes);
 
-app.get("/health", (req, res) => res.json({ ok: true }));
+app.get("/health", (req, res) => {
+  const dbReady = isDbReady();
+  res.status(dbReady ? 200 : 503).json({ ok: dbReady, db: dbReady ? "up" : "down" });
+});
 
 app.get("/robots.txt", (req, res) => {
   res.type("text/plain");
@@ -100,13 +114,14 @@ app.use((err, req, res, next) => {
 });
 
 
-connectDb(process.env.MONGODB_URI)
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Backend started on http://localhost:${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error("DB connection error:", err);
-    process.exit(1);
-  });
+// Слушаем порт сразу, не дожидаясь базы. Раньше было наоборот, и пока Mongo
+// лежала, nginx отдавал 502 — по нему невозможно отличить «сервис упал» от
+// «сервис поднимается». Теперь приходит 503 с объяснением, а картинки и
+// статика работают всё это время.
+app.listen(PORT, () => {
+  console.log(`Backend started on http://localhost:${PORT}`);
+});
+
+connectDb(process.env.MONGODB_URI).catch((err) => {
+  console.error("MongoDB: не удалось подключиться:", err && err.message ? err.message : err);
+});

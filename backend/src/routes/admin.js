@@ -12,7 +12,7 @@ const Order = require("../models/Order");
 const Lead = require("../models/Lead");
 const SiteSettings = require("../models/SiteSettings");
 const { requireAdmin } = require("../middleware/auth");
-const { workbookToProducts } = require("../services/excelImport");
+const { runWorkbookImport } = require("../services/excelImportRunner");
 const { slugify, getImportSupplier, buildProductKey, normalizeImageUrl, normalizeSiteSettings } = require("../utils");
 
 const router = express.Router();
@@ -30,20 +30,57 @@ const categoryVideosDir = path.join(uploadsRoot, "category-videos");
 fs.mkdirSync(categoryVideosDir, { recursive: true });
 const importChunksDir = path.join(uploadsRoot, "import-chunks");
 fs.mkdirSync(importChunksDir, { recursive: true });
+const importIncomingDir = path.join(uploadsRoot, "import-incoming");
+fs.mkdirSync(importIncomingDir, { recursive: true });
 
-const imageUpload = multer({
+// Брошенные загрузки убираются по возрасту.
+//
+// Чанки удаляются только в обработчике /complete, поэтому прерванный импорт
+// (закрыли вкладку, оборвалась сеть, менеджер передумал) оставляет их на
+// диске навсегда. Один прайс — до 90 МБ за раз, и никто этого не замечает,
+// пока место не кончится.
+const uploadTtlMs = Math.max(30 * 60 * 1000, Number(process.env.UPLOAD_TTL_MS || 6 * 60 * 60 * 1000));
+
+function sweepStaleUploads() {
+  const now = Date.now();
+
+  for (const dir of [importChunksDir, importIncomingDir]) {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dir);
+    } catch (e) {
+      continue;
+    }
+
+    for (const name of entries) {
+      const target = path.join(dir, name);
+      try {
+        if (now - fs.statSync(target).mtimeMs < uploadTtlMs) continue;
+        fs.rmSync(target, { recursive: true, force: true });
+        console.log(`uploads: убрана брошенная загрузка ${target}`);
+      } catch (e) {
+        // noop
+      }
+    }
+  }
+}
+
+sweepStaleUploads();
+setInterval(sweepStaleUploads, 60 * 60 * 1000).unref();
+
+// Прайсы кладутся сразу на диск, а не в память: Excel на 90 МБ, прочитанный
+// в буфер, — это 90 МБ в куче ещё до начала разбора.
+const importUpload = multer({
   storage: multer.diskStorage({
     destination: (_, __, cb) => {
-      fs.mkdirSync(productImagesDir, { recursive: true });
-      cb(null, productImagesDir);
+      fs.mkdirSync(importIncomingDir, { recursive: true });
+      cb(null, importIncomingDir);
     },
-    filename: (_, file, cb) => {
-      const ext = path.extname(String(file.originalname || "")).toLowerCase();
-      const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"].includes(ext) ? ext : ".jpg";
-      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
+    filename: (_, __, cb) => {
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}.upload`);
     },
   }),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 60 * 1024 * 1024 },
 });
 
 const videoUpload = multer({
@@ -63,7 +100,7 @@ const videoUpload = multer({
 
 function uploadSingle(field) {
   return (req, res, next) => {
-    upload.single(field)(req, res, (err) => {
+    importUpload.single(field)(req, res, (err) => {
       if (!err) return next();
 
       // Multer errors are very common for big files; return a readable message.
@@ -528,9 +565,10 @@ router.delete("/categories/:id", requireAdmin, async (req, res) => {
 });
 
 router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res) => {
+  const file = req.file;
+
   try {
     const t0 = Date.now();
-    const file = req.file;
     if (!file) return res.status(400).json({ error: "file is required" });
     const supplier = String(req.body?.supplier || "").trim();
     const supplierMeta = await resolveImportTarget(supplier);
@@ -539,12 +577,13 @@ router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res
     }
     const resolvedSupplierMeta = supplierMeta;
 
-    const items = await workbookToProducts({
-      buffer: file.buffer,
+    const items = await runWorkbookImport({
+      filePath: file.path,
       filename: file.originalname || "",
       imagesDir: productImagesDir,
       supplier: resolvedSupplierMeta.id,
-      resolvedSupplierMeta
+      resolvedSupplierMeta,
+      tmpDir: importIncomingDir
     });
 
     if (!items.length) {
@@ -579,6 +618,14 @@ router.post("/import/excel", requireAdmin, uploadSingle("file"), async (req, res
     });
   } catch (e) {
     res.status(500).json({ error: "import failed", details: String(e && e.message ? e.message : e) });
+  } finally {
+    if (file && file.path) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch (e) {
+        // noop
+      }
+    }
   }
 });
 
@@ -592,22 +639,42 @@ router.post("/import/excel/chunk/init", requireAdmin, async (req, res) => {
 });
 
 router.post("/import/excel/chunk/:uploadId", requireAdmin, uploadSingle("chunk"), async (req, res) => {
-  const dir = getChunkDir(req.params.uploadId);
-  if (!dir) return res.status(400).json({ error: "invalid upload id" });
-  if (!fs.existsSync(dir)) return res.status(404).json({ error: "upload session not found" });
-
   const file = req.file;
+
+  // multer успевает записать чанк на диск до всех проверок ниже, поэтому любой
+  // ранний выход обязан за собой убрать.
+  const discardUpload = () => {
+    if (!file || !file.path) return;
+    try {
+      fs.unlinkSync(file.path);
+    } catch (e) {
+      // noop
+    }
+  };
+
+  const dir = getChunkDir(req.params.uploadId);
+  if (!dir) {
+    discardUpload();
+    return res.status(400).json({ error: "invalid upload id" });
+  }
+  if (!fs.existsSync(dir)) {
+    discardUpload();
+    return res.status(404).json({ error: "upload session not found" });
+  }
+
   if (!file) return res.status(400).json({ error: "chunk is required" });
 
   const idxRaw = String(req.body?.index || "").trim();
   const idx = Number(idxRaw);
   if (!Number.isInteger(idx) || idx < 0 || idx > 10000) {
+    discardUpload();
     return res.status(400).json({ error: "invalid chunk index" });
   }
 
+  // Переносим, а не перечитываем в память: чанк уже лежит на том же диске.
   const partPath = path.join(dir, `${idx}.part`);
-  fs.writeFileSync(partPath, file.buffer);
-  res.json({ ok: true, index: idx, size: file.size || file.buffer?.length || 0 });
+  fs.renameSync(file.path, partPath);
+  res.json({ ok: true, index: idx, size: file.size || 0 });
 });
 
 router.post("/import/excel/chunk/:uploadId/complete", requireAdmin, async (req, res) => {
@@ -634,15 +701,36 @@ router.post("/import/excel/chunk/:uploadId/complete", requireAdmin, async (req, 
       return res.status(400).json({ error: "no chunks uploaded" });
     }
 
-    const buffers = parts.map((p) => fs.readFileSync(path.join(dir, p.name)));
-    const merged = Buffer.concat(buffers);
+    // Склейка потоком. Прежний Buffer.concat держал в памяти одновременно и
+    // массив всех кусков, и полную копию файла — две копии прайса ещё до того,
+    // как начнётся собственно разбор.
+    const mergedPath = path.join(dir, "merged.xlsx");
+    await new Promise((resolve, reject) => {
+      const out = fs.createWriteStream(mergedPath);
+      out.on("error", reject);
+      out.on("finish", resolve);
 
-    const items = await workbookToProducts({
-      buffer: merged,
+      const writeNext = (i) => {
+        if (i >= parts.length) {
+          out.end();
+          return;
+        }
+        const input = fs.createReadStream(path.join(dir, parts[i].name));
+        input.on("error", reject);
+        input.on("end", () => writeNext(i + 1));
+        input.pipe(out, { end: false });
+      };
+
+      writeNext(0);
+    });
+
+    const items = await runWorkbookImport({
+      filePath: mergedPath,
       filename,
       imagesDir: productImagesDir,
       supplier: resolvedSupplierMeta.id,
-      resolvedSupplierMeta
+      resolvedSupplierMeta,
+      tmpDir: dir
     });
 
     if (!items.length) {

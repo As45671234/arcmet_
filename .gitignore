@@ -33,3 +33,13 @@ yarn-error.log*
 # Monitoring secrets (create manually on VPS, never commit)
 .env.monitoring
 healthcheck.log
+
+# Секреты.
+#
+# backend/.env лежал в этом репозитории, а репозиторий публичный. Пароль
+# администратора, JWT_SECRET, ADMIN_PURGE_PASSWORD и пароль SMTP совпадали
+# с боевыми. Из индекса файлы убраны, но в истории коммитов они остаются —
+# пароли надо считать скомпрометированными и сменить.
+.env
+.env.*
+!.env.example
